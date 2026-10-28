@@ -1,0 +1,2141 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cyber Diagnostic</title>
+<style>
+/* Kiosque de stand : fond noir permanent (identité Orange), orange #FF7900, typographie Arial.
+   Une scène 3D unique sert de décor à tous les écrans ; les écrans HTML se superposent et se relaient. */
+:root{
+  --bg:#000;--surface:#0e0e0e;--surface2:#171717;--glass:rgba(14,14,14,.78);
+  --fg:#fff;--muted:#fff;--dim:#fff;--line:#2c2c2c;--track:#262626;
+  --accent:#FF7900;--accent-ink:#FF8F2A;--on-accent:#000;
+  --bad:#F0563E;--good:#50BE87;--info:#4BB4E6;
+  --lv1:#8A4200;--lv2:#C25F00;--lv3:#FF8A1F;--lv4:#FFC27A;--lv1t:#fff;--lv2t:#fff;--lv3t:#000;--lv4t:#000;
+  --heat-lo:#2B2118;--heat-hi:#FF8A1F;--on-heat:#000;
+  --display:Arial,Helvetica,sans-serif;--body:var(--display);--mono:var(--display);
+  --ease:cubic-bezier(.2,.7,.1,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{font-size:clamp(15px,.5vw + 9px,21px)}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:var(--body);line-height:1.45;-webkit-font-smoothing:antialiased;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+input,textarea{user-select:text;-webkit-user-select:text}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+h1,h2,h3{font-family:var(--display);font-weight:700;margin:0;letter-spacing:-.02em;line-height:1.05;text-wrap:balance}
+p{margin:0}
+
+/* ---------- décor ---------- */
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+.vignette{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 50%,transparent 45%,rgba(0,0,0,.75) 100%)}
+.no-gl #gl{display:none}
+.no-gl body,.no-gl{background:radial-gradient(70% 60% at 70% 45%,#2a1300 0%,#000 70%)}
+.grain{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:64px 64px;mask-image:radial-gradient(80% 70% at 50% 50%,#000 30%,transparent 100%)}
+
+/* ---------- barre haute ---------- */
+.top{position:fixed;top:0;left:0;right:0;z-index:20;background:linear-gradient(#000 0%,rgba(0,0,0,.85) 55%,transparent);display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:max(14px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) 14px max(24px,env(safe-area-inset-left));pointer-events:none}
+.top>*{pointer-events:auto}
+.brand{display:flex;align-items:center;font-weight:700;font-size:1.15rem;letter-spacing:-.01em;min-height:44px;text-align:left}
+.brand .bn{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.brand .bl{display:flex;align-items:center;gap:12px}
+.blogo{display:block;height:clamp(24px,2.2vw,34px);width:auto}
+.brand .sep{width:1px;height:22px;background:var(--line)}
+.brand small{font-weight:400;font-size:.8rem;color:var(--muted);letter-spacing:.02em}
+.top-r{display:flex;align-items:center;gap:10px}
+.ghost{min-height:44px;padding:0 18px;border:1px solid var(--line);font-size:.85rem;font-weight:700;background:rgba(0,0,0,.4);transition:border-color .2s}
+.ghost:hover{border-color:var(--fg)}
+.ghost[hidden]{display:none}
+.snd{padding:0 12px;display:inline-flex;align-items:center}
+.snd svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.snd .x{display:none}.snd[aria-pressed="false"] .x{display:inline}.snd[aria-pressed="false"] .w{display:none}
+.snd[aria-pressed="false"]{color:var(--dim)}
+
+/* ---------- écrans ---------- */
+.screen{position:fixed;inset:0;z-index:2;opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .7s var(--ease),visibility 0s linear .7s}
+.screen.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .7s var(--ease),visibility 0s}
+.scroll{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.kicker{font-size:.8rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:64px;padding:0 34px;font-weight:700;font-size:1.05rem;
+  border:2px solid var(--fg);transition:transform .15s,background .2s,color .2s,border-color .2s}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:#ff8a1f}
+.btn.light{background:var(--fg);border-color:var(--fg);color:#000}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn .arr{display:inline-block;transition:transform .25s}
+.btn:hover .arr{transform:translateX(5px)}
+.btn.small{min-height:48px;padding:0 20px;font-size:.9rem}
+
+/* ---------- accueil ---------- */
+#s-attract{display:flex;align-items:center;cursor:pointer}
+.att{position:relative;max-width:min(1000px,58vw);padding:0 0 0 max(6vw,24px)}
+.att .kicker{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.att .kicker i{display:inline-block;width:10px;height:10px;background:var(--accent);animation:blink 1.6s infinite}
+@keyframes blink{50%{opacity:.25}}
+.att-h{font-size:clamp(2.4rem,4.4vw,5.4rem);line-height:.98;letter-spacing:-.035em}
+.att-h em{font-style:normal;color:var(--accent)}
+.att-q{margin:34px 0 0;min-height:3.2em;font-size:clamp(1.1rem,1.6vw,1.6rem);color:var(--muted);max-width:36ch;display:flex;gap:16px;align-items:flex-start}
+.att-q::before{content:"";flex:none;width:28px;height:2px;background:var(--accent);margin-top:.7em}
+.att-q span{transition:opacity .35s,transform .35s var(--ease)}
+.att-q span.out{opacity:0;transform:translateY(-8px)}
+.att-cta{margin-top:40px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.att-cta .btn{min-height:76px;padding:0 44px;font-size:1.25rem}
+.att-meta{font-size:.85rem;color:var(--muted);line-height:1.6}
+.att-meta b{color:var(--fg)}
+.pulse{position:relative}
+.pulse::after{content:"";position:absolute;inset:-2px;border:2px solid var(--accent);animation:ring 2.2s infinite var(--ease);pointer-events:none}
+@keyframes ring{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.18,1.5)}}
+.att-fns{position:absolute;left:max(6vw,24px);right:max(6vw,24px);bottom:max(28px,env(safe-area-inset-bottom));display:flex;gap:2px;list-style:none;margin:0;padding:0}
+.att-fns li{flex:1;border-top:2px solid var(--line);padding-top:10px;font-size:.75rem;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;font-weight:700;transition:color .4s,border-color .4s}
+.att-fns li b{display:block;color:var(--muted);font-size:.7rem;margin-bottom:2px}
+.att-fns li.on{border-color:var(--accent);color:var(--fg)}
+
+/* ---------- secteur ---------- */
+#s-sector{display:flex}
+.sec-wrap{margin:auto;width:min(1240px,100%);padding:140px max(24px,4vw) 48px}
+.sec-wrap h2{font-size:clamp(2rem,3.6vw,3.6rem);margin:14px 0 12px}
+.sub{color:var(--muted);font-size:1.05rem;max-width:62ch}
+.sgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:34px 0 26px}
+.stile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:10px;text-align:left;min-height:150px;padding:20px;
+  background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transition:border-color .25s,background .25s,transform .25s var(--ease);opacity:0;transform:translateY(16px)}
+.on .stile{animation:tileIn .6s var(--ease) forwards;animation-delay:calc(var(--i)*55ms + .15s)}
+@keyframes tileIn{to{opacity:1;transform:none}}
+.stile svg{width:34px;height:34px;stroke:var(--accent);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.stile b{font-size:1.08rem}
+.stile span{font-size:.85rem;color:var(--muted)}
+.stile:hover{border-color:var(--muted)}
+.stile[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#000}
+.stile[aria-pressed="true"] svg{stroke:#000}
+.stile[aria-pressed="true"] span{color:#000}
+.stile[aria-pressed="true"]::after{content:"✓";position:absolute;top:14px;right:16px;font-weight:700;font-size:1.2rem}
+.sec-foot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px 28px;align-items:end}
+.stds{display:flex;flex-wrap:wrap;gap:8px;min-height:34px;margin:0 0 4px;padding:0;list-style:none}
+.stds li{font-size:.78rem;border:1px solid var(--line);padding:6px 10px;color:var(--muted);background:rgba(0,0,0,.5);animation:tileIn .4s var(--ease) both;opacity:0;transform:translateY(6px)}
+.field{display:flex;flex-direction:column;gap:6px;max-width:520px}
+.field label{font-size:.85rem;color:var(--muted)}
+.field input{min-height:56px;font:inherit;font-size:1.05rem;padding:0 16px;border:1px solid var(--line);background:rgba(0,0,0,.6);color:var(--fg);border-radius:0}
+.field input:focus{border-color:var(--accent);outline:none}
+.consent{font-size:.78rem;color:var(--dim);max-width:70ch;margin-top:10px}
+
+/* ---------- parcours ---------- */
+#s-quiz{display:grid;grid-template-columns:minmax(0,38fr) minmax(0,62fr);grid-template-rows:1fr auto}
+.qz-left{position:relative;display:flex;flex-direction:column;justify-content:flex-end;padding:0 0 34px max(24px,3vw)}
+.hud{width:min(360px,100%);display:flex;flex-direction:column;gap:7px;background:rgba(0,0,0,.55);border:1px solid var(--line);padding:16px 18px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.hud-t{display:flex;justify-content:space-between;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:4px}
+.hud-t b{color:var(--accent)}
+.hrow2{display:grid;grid-template-columns:92px minmax(0,1fr) 42px;gap:10px;align-items:center;font-size:.8rem;color:var(--dim);transition:color .3s}
+.hrow2 .c{font-weight:700}
+.hrow2 .b{height:6px;background:var(--track);position:relative;overflow:hidden}
+.hrow2 .b i{position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);transition:width .8s var(--ease),background .4s}
+.hrow2 .v{text-align:right;font-variant-numeric:tabular-nums}
+.hrow2.cur{color:var(--fg)}
+.hrow2.cur .c{color:var(--accent)}
+.hrow2.lo .b i{background:var(--bad)}
+.qz-main{display:flex;flex-direction:column;justify-content:center;padding:124px max(24px,4vw) 20px max(12px,2vw);min-width:0}
+.qz-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.chap{font-size:.85rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.chap span{color:var(--muted)}
+.qcount{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.qcount b{color:var(--fg);font-size:1.3rem}
+.qbody{position:relative}
+.qbody.out{animation:qOut .28s ease-in forwards}
+.qbody.in{animation:qIn .55s var(--ease) both}
+.qbody.inb{animation:qInB .55s var(--ease) both}
+@keyframes qOut{to{opacity:0;transform:translateX(-40px)}}
+@keyframes qIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
+@keyframes qInB{from{opacity:0;transform:translateX(-60px)}to{opacity:1;transform:none}}
+.badges{display:flex;gap:8px;flex-wrap:wrap;min-height:28px;margin-bottom:12px}
+.badge{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:5px 10px;border:1px solid var(--accent);color:var(--accent)}
+.badge.crit{background:var(--accent);color:#000}
+.qtext{font-size:clamp(1.55rem,2.5vw,2.6rem);line-height:1.18;letter-spacing:-.02em;max-width:30ch}
+.qhint{margin-top:14px;color:var(--muted);font-size:.95rem;max-width:62ch;display:flex;gap:10px}
+.qhint::before{content:"Niveau 3";flex:none;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--line);padding:3px 7px;height:fit-content;color:var(--fg)}
+.answers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:30px}
+.ans{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;text-align:left;min-height:104px;padding:16px 20px;
+  background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:hidden;
+  transition:border-color .2s,background .25s,transform .15s}
+.ans:hover{border-color:var(--muted)}
+.ans:active{transform:scale(.985)}
+.ans .lv{display:flex;align-items:flex-end;gap:4px;height:40px}
+.ans .lv i{width:9px;background:var(--track);transition:background .3s}
+.ans .lv i:nth-child(1){height:34%}.ans .lv i:nth-child(2){height:67%}.ans .lv i:nth-child(3){height:100%}
+.ans .lv i.f{background:var(--accent)}
+.ans .tx b{display:block;font-size:1.12rem}
+.ans .tx span{display:block;font-size:.85rem;color:var(--muted);margin-top:2px}
+.ans .k{position:absolute;top:10px;right:12px;font-size:.7rem;color:var(--dim);font-weight:700}
+.ans[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#000}
+.ans[aria-pressed="true"] .tx span,.ans[aria-pressed="true"] .k{color:#000}
+.ans[aria-pressed="true"] .lv i{background:rgba(0,0,0,.25)}
+.ans[aria-pressed="true"] .lv i.f{background:#000}
+.ans.hit::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at var(--x,50%) var(--y,50%),rgba(255,255,255,.55),transparent 55%);animation:hit .6s ease-out forwards}
+@keyframes hit{from{opacity:1}to{opacity:0}}
+.qz-nav{display:flex;justify-content:space-between;align-items:center;margin-top:22px;gap:12px}
+.link{min-height:48px;color:var(--muted);font-size:.9rem;font-weight:700;padding:0 4px}
+.link:hover{color:var(--fg)}
+.keys{font-size:.75rem;color:var(--dim)}
+.track{grid-column:1/-1;display:flex;gap:10px;padding:0 max(24px,3vw) max(22px,env(safe-area-inset-bottom))}
+.tseg{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tseg .tl{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s}
+.tseg .tt{display:flex;gap:3px}
+.tseg .tt i{flex:1;height:5px;background:var(--track);transition:background .4s}
+.tseg .tt i.d{background:var(--fg)}
+.tseg .tt i.n{background:var(--accent);animation:blink 1.2s infinite}
+.tseg.cur .tl{color:var(--accent)}
+.tseg.done .tl{color:var(--fg)}
+
+/* intertitre de chapitre */
+.chapter{position:fixed;inset:0;z-index:15;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  opacity:0;visibility:hidden;transition:opacity .45s,visibility 0s .45s}
+.chapter.on{opacity:1;visibility:visible;transition:opacity .45s}
+.ch-in{text-align:center;padding:24px;max-width:900px}
+.ch-n{font-size:clamp(5rem,13vw,12rem);font-weight:700;line-height:.85;letter-spacing:-.05em;color:transparent;-webkit-text-stroke:2px var(--accent)}
+.ch-f{font-size:1rem;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:var(--accent);margin:18px 0 14px}
+.ch-q{font-size:clamp(1.8rem,3.4vw,3.2rem);letter-spacing:-.02em;line-height:1.1}
+.ch-m{margin-top:18px;color:var(--muted);font-size:.9rem}
+.chapter.on .ch-n{animation:chN 1.1s var(--ease) both}
+.chapter.on .ch-f{animation:qIn .7s .15s var(--ease) both}
+.chapter.on .ch-q{animation:qIn .7s .25s var(--ease) both}
+.chapter.on .ch-m{animation:qIn .7s .35s var(--ease) both}
+@keyframes chN{from{opacity:0;transform:scale(1.25);letter-spacing:.05em}to{opacity:1;transform:none}}
+
+/* ---------- analyse ---------- */
+#s-analyze{display:flex;align-items:center;justify-content:center;text-align:center}
+.an{width:min(720px,92vw)}
+.an h2{font-size:clamp(2rem,3.6vw,3.4rem);margin:16px 0 30px}
+.an-bar{height:4px;background:var(--track);overflow:hidden}
+.an-bar i{display:block;height:100%;width:0;background:var(--accent)}
+.on .an-bar i{animation:fill var(--dur,2.8s) linear forwards}
+@keyframes fill{to{width:100%}}
+.an-steps{list-style:none;margin:26px 0 0;padding:0;display:flex;flex-direction:column;gap:10px;font-size:.95rem;color:var(--dim);text-align:left}
+.an-steps li{display:flex;gap:12px;align-items:center;transition:color .3s}
+.an-steps li::before{content:"";width:10px;height:10px;border:1px solid var(--dim);flex:none;transition:all .3s}
+.an-steps li.ok{color:var(--fg)}
+.an-steps li.ok::before{background:var(--accent);border-color:var(--accent)}
+
+/* ---------- restitution ---------- */
+#s-result{z-index:3}
+.res{width:min(1360px,100%);margin:0 auto;padding:136px max(20px,3vw) 60px;display:flex;flex-direction:column;gap:18px}
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:clamp(20px,2.4vw,36px)}
+.r-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.r-head h1{font-size:clamp(2.2rem,4vw,4rem);margin-top:10px}
+.rv{opacity:0;transform:translateY(24px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.rv.in{opacity:1;transform:none}
+.r-hero{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:clamp(20px,3vw,48px);align-items:center}
+.gauge{position:relative;width:clamp(220px,20vw,300px);aspect-ratio:1}
+.gauge svg{width:100%;height:100%;transform:rotate(-90deg)}
+.gauge .bgc{fill:none;stroke:var(--track);stroke-width:12}
+.gauge .fgc{fill:none;stroke:var(--accent);stroke-width:12;stroke-linecap:butt;transition:stroke-dashoffset 2.4s cubic-bezier(.33,1,.68,1);filter:drop-shadow(0 0 10px rgba(255,121,0,.55))}
+.gauge .tick{stroke:#000;stroke-width:3}
+.gauge .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gauge .num{font-size:clamp(4.4rem,6.4vw,6.4rem);font-weight:700;line-height:.9;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+.gauge .of{font-size:.9rem;color:var(--muted);margin-top:6px;letter-spacing:.1em}
+.lvl-pill{display:inline-block;font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;background:var(--accent);color:#000;padding:6px 10px}
+.lvl-name{font-size:clamp(2.6rem,4.6vw,4.6rem);margin:12px 0 10px;letter-spacing:-.035em}
+.verdict p.t{color:var(--muted);font-size:1.02rem;max-width:44ch}
+.capbox{border:1px solid var(--accent);background:rgba(255,121,0,.08);padding:14px 16px;margin-top:16px;font-size:.92rem;max-width:52ch}
+.capbox b{display:block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.ladder{margin-top:26px;max-width:520px}
+.lad-z{display:flex;gap:3px;position:relative}
+.lad-z div{flex:1;height:12px;background:var(--track);transition:background .6s}
+.lad-z div.on{background:var(--accent)}
+.lad-z div.past{background:#5a2a00}
+.lad-l{display:flex;gap:3px;margin-top:8px}
+.lad-l span{flex:1;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.lad-l span.on{color:var(--fg)}
+.mk{position:absolute;top:-30px;transform:translateX(-50%);font-size:.7rem;font-weight:700;white-space:nowrap;transition:left 2.2s var(--ease)}
+.mk::after{content:"";position:absolute;left:50%;top:18px;width:2px;height:24px;background:var(--fg);transform:translateX(-50%)}
+.mk.bench{top:auto;bottom:-46px;color:var(--info)}
+.mk.bench::after{top:auto;bottom:16px;background:var(--info)}
+.ladder.hasb{margin-bottom:34px}
+.radar{width:100%;max-width:440px;height:auto;display:block;margin:0 auto;overflow:visible}
+.radar .ring{fill:none;stroke:#333;stroke-width:1}
+.radar .axis{stroke:#333;stroke-width:1}
+.radar .shape{fill:rgba(255,121,0,.28);stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round;transform-box:view-box;transform-origin:180px 170px;transform:scale(0);transition:transform 1.6s var(--ease) .3s}
+.radar .bench{fill:none;stroke:var(--info);stroke-width:1.5;stroke-dasharray:5 4;opacity:0;transition:opacity 1s 1.4s}
+.radar .dot{fill:#000;stroke:var(--accent);stroke-width:2.5;opacity:0;transition:opacity .5s 1.6s}
+.radar text{fill:#fff;font-family:var(--body);font-size:13px;font-weight:700}
+.radar text.pc{fill:var(--accent);font-size:12px}
+.rv.in .radar .shape{transform:scale(1)}
+.rv.in .radar .bench,.rv.in .radar .dot{opacity:1}
+.rcap{text-align:center;font-size:.75rem;color:var(--dim);margin-top:6px}
+.rcap i{display:inline-block;width:18px;height:0;border-top:2px dashed var(--info);vertical-align:middle;margin:0 6px 0 12px}
+.r-sw{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.r-sw h3,.sec-h h3{font-size:1.6rem;letter-spacing:-.02em}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.sec-h .kicker{font-size:.72rem}
+.swl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.swl li{display:grid;grid-template-columns:78px minmax(0,1fr);gap:14px;padding:14px 0;border-top:1px solid var(--line)}
+.swl li:first-child{border-top:0;padding-top:4px}
+.swl .c{font-size:1.6rem;font-weight:700;letter-spacing:-.03em;line-height:1}
+.swl .c small{font-size:.9rem;margin-left:2px;letter-spacing:0}
+.swl .c small.b{display:block;font-size:.72rem;color:var(--muted);margin:4px 0 0}
+.good .swl .c{color:var(--good)}
+.bad .swl .c{color:var(--bad)}
+.swl b{display:block;font-size:1.02rem}
+.swl p{color:var(--muted);font-size:.9rem;margin-top:2px}
+.dotk{display:inline-block;width:10px;height:10px;margin-right:10px;vertical-align:middle}
+.good .dotk{background:var(--good)}.bad .dotk{background:var(--bad)}
+.empty{color:var(--muted);font-size:.95rem}
+.fngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.fnc{border:1px solid var(--line);padding:16px 18px;background:rgba(0,0,0,.35)}
+.fnc .h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.fnc .cd{font-size:1.45rem;font-weight:700;letter-spacing:-.03em;line-height:1}
+.fnc .pc{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
+.fnc .nm{font-size:.85rem;color:var(--muted);margin:4px 0 12px;display:flex;justify-content:space-between;gap:8px}
+.fnc .nm em{font-style:normal;color:var(--bad);font-weight:700;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+.fnc .tr{height:8px;background:var(--track);overflow:hidden}
+.fnc .fl{height:100%;width:0;background:var(--accent);transition:width 1.6s var(--ease)}
+.fnc.lo .fl{background:var(--bad)}
+.plan{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.pcol h4{margin:0 0 12px;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:10px}
+.pcol h4::after{content:"";flex:1;height:1px;background:var(--line)}
+.acts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.act{display:grid;grid-template-columns:48px minmax(0,1fr);gap:14px;padding:16px;border:1px solid var(--line);background:rgba(0,0,0,.35)}
+.act .rk{font-size:2rem;font-weight:700;line-height:1;color:var(--accent);letter-spacing:-.04em}
+.act .what{font-weight:700;font-size:1rem;line-height:1.35}
+.meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.75rem;color:var(--muted);margin-top:8px;align-items:center}
+.meta b{color:var(--fg)}
+.chip{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:#000;padding:3px 7px}
+.legend{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:.78rem;color:var(--dim)}
+.legend b{color:var(--muted)}
+.chks{list-style:none;margin:0;padding:0}
+.chk{display:grid;grid-template-columns:130px minmax(0,1fr);gap:16px;padding:14px 0;border-top:1px solid var(--line);align-items:start}
+.chk:first-child{border-top:0;padding-top:0}
+.st{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-align:center;border:1px solid var(--fg);padding:5px 6px}
+.st-3{background:var(--good);border-color:var(--good);color:#000}
+.st-2{background:var(--accent);border-color:var(--accent);color:#000}
+.st-0,.st-1{background:var(--bad);border-color:var(--bad);color:#000}
+.chk .what{font-weight:700}
+.cases{display:flex;flex-direction:column;gap:10px}
+details.case{border:1px solid var(--line);background:rgba(0,0,0,.4)}
+details.case>summary{list-style:none;cursor:pointer;padding:16px 56px 16px 18px;display:flex;flex-direction:column;gap:4px;position:relative;min-height:64px;justify-content:center}
+details.case>summary::-webkit-details-marker{display:none}
+details.case>summary::after{content:"+";position:absolute;right:20px;top:50%;transform:translateY(-50%);font-size:1.8rem;font-weight:400;color:var(--accent)}
+details.case[open]>summary::after{content:"\2212"}
+details.case[open]>summary{border-bottom:1px solid var(--line)}
+details.case .o{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.78rem;color:var(--muted)}
+details.case .t{font-weight:700;font-size:1.05rem}
+.cb{padding:18px;display:flex;flex-direction:column;gap:12px;font-size:.93rem}
+.facts{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.debate{border-left:3px solid var(--accent);padding:10px 14px;font-weight:700;background:rgba(255,121,0,.07)}
+.debate b{display:block;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.gapline{font-size:.8rem;color:var(--fg)}
+.caveat{font-size:.8rem;color:var(--dim)}
+.src{font-size:.8rem;color:var(--muted);text-underline-offset:3px;align-self:flex-start;min-height:32px;display:inline-flex;align-items:center}
+.offers{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.offer{border:1px solid var(--line);padding:22px;display:flex;flex-direction:column;gap:10px;background:rgba(0,0,0,.4);position:relative;overflow:hidden}
+.offer::before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:var(--accent)}
+.offer h4{margin:0;font-size:1.5rem;letter-spacing:-.02em}
+.offer p{font-size:.92rem;color:var(--muted)}
+.offer .gap{font-size:.75rem;color:var(--fg);margin-top:auto;font-weight:700}
+.r-cta{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;background:var(--accent);color:#000;padding:clamp(24px,3vw,44px)}
+.r-cta h2{font-size:clamp(2rem,3.4vw,3.4rem);letter-spacing:-.03em}
+.r-cta p{font-size:1.05rem;margin-top:10px;max-width:52ch}
+.r-cta .acts2{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
+.r-cta .btn{border-color:#000}
+.r-cta .btn.dark{background:#000;color:#fff}
+.qrbox{background:#fff;padding:14px;width:clamp(170px,14vw,220px);text-align:center;color:#000}
+.qrbox svg{width:100%;height:auto;display:block}
+.qrbox p{font-size:.72rem;font-weight:700;margin-top:8px;line-height:1.3}
+.r-foot{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+.note{font-size:.78rem;color:var(--dim);max-width:90ch}
+.savestatus,.toast{font-size:.75rem;color:var(--dim);min-height:18px}
+.toast{color:var(--accent)}
+.sum{width:100%;min-height:150px;margin-top:10px;font:inherit;font-size:.8rem;padding:12px;border:1px solid var(--line);background:#000;color:var(--fg)}
+
+/* expert & veille */
+.overlay{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;
+  opacity:0;visibility:hidden;transition:opacity .4s,visibility 0s .4s}
+.overlay.on{opacity:1;visibility:visible;transition:opacity .4s}
+#expert{background:var(--accent);color:#000}
+#expert h2{font-size:clamp(2.6rem,6vw,6rem);letter-spacing:-.04em;line-height:.95}
+#expert p{font-size:1.2rem;margin:22px auto 34px;max-width:40ch}
+#expert .btn{border-color:#000}
+.wave{display:flex;gap:8px;justify-content:center;margin-bottom:34px}
+.wave i{width:14px;height:14px;background:#000;animation:wv 1.2s infinite}
+.wave i:nth-child(2){animation-delay:.15s}.wave i:nth-child(3){animation-delay:.3s}
+@keyframes wv{50%{transform:translateY(-14px);opacity:.4}}
+#idle{background:rgba(0,0,0,.86);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#idle h2{font-size:clamp(2rem,4vw,3.6rem)}
+#idle p{color:var(--muted);margin:14px 0 30px;font-size:1.05rem}
+.cd-num{font-size:5rem;font-weight:700;color:var(--accent);line-height:1;margin-bottom:14px;font-variant-numeric:tabular-nums}
+
+/* ---------- tableau de bord (équipe) ---------- */
+#s-dash .dwrap{width:min(1100px,100%);margin:0 auto;padding:132px max(16px,3vw) 60px}
+.dash{display:flex;flex-direction:column;gap:18px}
+.panel{background:var(--glass);border:1px solid var(--line);padding:clamp(18px,2.4vw,32px);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.panel h1{font-size:clamp(2rem,4vw,3.2rem);margin:8px 0 10px}
+.panel h2{font-size:1.5rem}
+.eyebrow{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.lead2{color:var(--muted);max-width:60ch}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:18px}
+.filters label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--muted)}
+.filters select{min-height:48px;font:inherit;font-size:.95rem;padding:0 10px;border:1px solid var(--line);background:#000;color:var(--fg);min-width:200px;max-width:100%}
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px 32px;align-items:center}
+.hnum{display:block;font-size:clamp(4rem,9vw,6rem);font-weight:700;line-height:1}
+.hlab{display:block;color:var(--muted);margin-top:4px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{border:1px solid var(--line);padding:12px 14px;background:rgba(0,0,0,.4)}
+.tile .tl{font-size:.8rem;color:var(--muted)}
+.tile .tv{font-size:1.8rem;font-weight:700;line-height:1.25}
+.dash[data-view="chart"] .tbl{display:none}
+.dash[data-view="table"] .viz{display:none}
+.hb{display:flex;flex-direction:column;gap:10px}
+.hrow{display:grid;grid-template-columns:minmax(110px,210px) minmax(0,1fr);gap:12px;align-items:center;min-height:36px}
+.hl{font-size:.92rem;min-width:0}
+.hl small{display:block;color:var(--muted);font-size:.75rem}
+.ht{display:flex;align-items:center;gap:10px;min-width:0}
+.hw{flex:1;min-width:0}
+.hf{height:16px;background:var(--accent);min-width:2px}
+.hv{width:46px;text-align:right;font-size:.82rem;font-variant-numeric:tabular-nums}
+.stack{display:flex;gap:2px;height:28px;min-width:0}
+.sg{display:flex;align-items:center;justify-content:center;min-width:2px;font-size:.7rem;white-space:nowrap}
+.sg.lv1,.sw.lv1{background:var(--lv1);color:var(--lv1t)}
+.sg.lv2,.sw.lv2{background:var(--lv2);color:var(--lv2t)}
+.sg.lv3,.sw.lv3{background:var(--lv3);color:var(--lv3t)}
+.sg.lv4,.sw.lv4{background:var(--lv4);color:var(--lv4t)}
+.lgd{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:.8rem;color:var(--muted);margin-bottom:14px}
+.lgd span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:12px;height:12px}
+.ramp{width:120px;height:10px;background:linear-gradient(90deg,var(--heat-lo),var(--heat-hi))}
+.tscroll{overflow-x:auto}
+.dt{width:100%;border-collapse:collapse;font-size:.88rem}
+.dt th,.dt td{padding:8px 10px;text-align:left;border-top:1px solid var(--line)}
+.dt thead th{border-top:none;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.dt .num{text-align:right;font-variant-numeric:tabular-nums}
+.dt tbody th{font-weight:500}
+.hm{border-collapse:separate;border-spacing:2px;width:100%;font-size:.88rem;min-width:560px}
+.hm th{text-align:left;padding:6px 8px;font-weight:500}
+.hm .hc-h{font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:center}
+.hm td.hc{text-align:center;font-size:.82rem;font-weight:700;padding:10px 6px;background:color-mix(in srgb,var(--heat-hi) calc(var(--p)*1%),var(--heat-lo));color:var(--fg)}
+.hm td.hc.hi{color:var(--on-heat)}
+.cols{display:flex;align-items:flex-end;gap:16px;min-height:160px;padding-top:6px}
+.col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;flex:0 0 64px}
+.cbar{width:28px;background:var(--accent)}
+.cv{font-size:.82rem;font-variant-numeric:tabular-nums}
+.cd{font-size:.75rem;color:var(--muted)}
+.adm summary{cursor:pointer;font-size:1.4rem;font-weight:700;min-height:44px;display:flex;align-items:center}
+.admb{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.dash .btn{min-height:48px;padding:0 20px;font-size:.9rem}
+
+/* onglets et historique */
+.dtabs{display:flex;gap:6px;flex-wrap:wrap}
+.dtabs button{min-height:48px;padding:0 18px;border:1px solid var(--line);background:rgba(0,0,0,.5);font-weight:700;font-size:.9rem;color:var(--muted)}
+.dtabs button[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#000}
+.filters input{min-height:48px;font:inherit;font-size:.95rem;padding:0 12px;border:1px solid var(--line);background:#000;color:var(--fg);min-width:240px;border-radius:0}
+.ht2 td,.ht2 th{vertical-align:middle}
+.ht2 tbody th{font-weight:700}
+.dtd{white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
+.anon{color:var(--dim);font-weight:400;font-style:italic}
+.sc2{display:inline-block;width:70px;height:6px;background:var(--track);vertical-align:middle;margin-right:10px;position:relative}
+.sc2 i{position:absolute;inset:0 auto 0 0;background:var(--accent)}
+.lvt{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;display:inline-block}
+.lvt.lv1{background:var(--lv1);color:var(--lv1t)}.lvt.lv2{background:var(--lv2);color:var(--lv2t)}.lvt.lv3{background:var(--lv3);color:var(--lv3t)}.lvt.lv4{background:var(--lv4);color:var(--lv4t)}
+.capd{color:var(--muted);font-size:.72rem}
+
+/* ---------- responsive ---------- */
+@media (max-width:1100px){
+  .sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .r-hero{grid-template-columns:auto minmax(0,1fr)}
+  .r-hero .r-radar{grid-column:1/-1}
+  .fngrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:860px), (orientation:portrait) and (max-width:1100px){
+  #s-quiz{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr auto}
+  .qz-left{padding:110px 16px 0;justify-content:flex-start;min-height:30vh}
+  .hud{display:none}
+  .qz-main{padding:0 16px 16px;justify-content:flex-start}
+  .att{max-width:none;padding:0 16px;margin-top:30vh}
+  .att-fns{display:none}
+  .r-sw,.plan{grid-template-columns:minmax(0,1fr)}
+  .r-cta{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:640px){
+  .top{padding-left:16px;padding-right:16px}
+  .brand small,.brand .sep{display:none}
+  .sec-wrap{padding:112px 16px 32px}
+  .sgrid{gap:8px}
+  .stile{min-height:120px;padding:14px}
+  .sec-foot{grid-template-columns:minmax(0,1fr)}
+  .answers{grid-template-columns:minmax(0,1fr);gap:8px;margin-top:20px}
+  .ans{min-height:76px;padding:12px 14px}
+  .keys{display:none}
+  .track .tl{display:none}
+  .track{padding:0 16px 16px;gap:6px}
+  .res{padding:112px 16px 40px}
+  .r-hero{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center}
+  .r-hero .verdict{text-align:left;width:100%}
+  .fngrid{grid-template-columns:minmax(0,1fr)}
+  .chk{grid-template-columns:minmax(0,1fr)}
+  .st{justify-self:start}
+  .hero{grid-template-columns:minmax(0,1fr)}
+  .att-cta .btn{min-height:64px;padding:0 28px;font-size:1.05rem}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+
+<header class="top">
+  <button type="button" class="brand" id="brand" aria-label="Orange Cloud et Cyber Solutions">
+    <span class="bn"><span class="bl"><span>Orange Cloud &amp; Cyber Solutions</span><span class="sep"></span><small>CYBER.EX 2026 · Abidjan</small></span>
+    <img class="blogo" alt="Orange Business" src="data:image/png;base64,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"></span>
+  </button>
+  <div class="top-r">
+    <button type="button" class="ghost snd" id="sndBtn" aria-pressed="true" aria-label="Son"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="x" d="M16 9l6 6M22 9l-6 6"/></svg></button>
+    <button type="button" class="ghost" id="restart" hidden>Recommencer</button>
+    <button type="button" class="ghost" id="backDiag" hidden>Retour au diagnostic</button>
+  </div>
+</header>
+
+<!-- 1. Accueil (mode veille) -->
+<section class="screen" id="s-attract" aria-label="Accueil">
+  <div class="att">
+    <p class="kicker"><i></i>Cyber Diagnostic</p>
+    <h1 class="att-h">Votre organisation tiendrait-elle <em>la première heure</em> d’une cyberattaque&nbsp;?</h1>
+    <p class="att-q" id="attQ" aria-live="off"></p>
+    <div class="att-cta">
+      <button type="button" class="btn primary pulse" id="startBtn">Lancer mon diagnostic <span class="arr">→</span></button>
+      <p class="att-meta"><b>3 minutes · 15 questions</b><br>Score, angles morts et plan d’action</p>
+    </div>
+  </div>
+  <ul class="att-fns" id="attFns"></ul>
+</section>
+
+<!-- 2. Secteur -->
+<section class="screen scroll" id="s-sector" aria-label="Votre secteur">
+  <div class="sec-wrap">
+    <p class="kicker">Étape 1 · Votre contexte</p>
+    <h2>Dans quel secteur opère votre organisation&nbsp;?</h2>
+    <p class="sub">Le diagnostic s’adapte à votre réalité : questions propres à votre secteur, contrôles clés pondérés et référentiels applicables.</p>
+    <div class="sgrid" id="sgrid" role="group" aria-label="Secteurs"></div>
+    <div class="sec-foot">
+      <div>
+        <ul class="stds" id="stds" aria-live="polite"></ul>
+        <div class="field"><label for="org">Organisation (facultatif)</label>
+          <input id="org" type="text" autocomplete="off" maxlength="60" placeholder="Nom de votre organisation"></div>
+        <p class="consent">Votre résultat est enregistré de façon anonyme pour des statistiques par secteur. Le nom de votre organisation, si vous le saisissez, n’est visible que par l’équipe du stand et n’apparaît jamais dans ces statistiques. Vos réponses sont effacées de cet écran dès la fin de votre session.</p>
+      </div>
+      <button type="button" class="btn primary" id="goBtn" disabled>Choisissez un secteur</button>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Parcours -->
+<section class="screen" id="s-quiz" aria-label="Diagnostic">
+  <aside class="qz-left">
+    <div class="hud" aria-label="Votre profil se construit">
+      <div class="hud-t"><span>Votre bouclier se construit</span><b id="hudPct"></b></div>
+      <div id="hudRows"></div>
+    </div>
+  </aside>
+  <div class="qz-main">
+    <div class="qz-top"><span class="chap" id="chap"></span><span class="qcount" id="qcount"></span></div>
+    <div class="qbody" id="qbody" aria-live="polite"></div>
+    <div class="qz-nav"><button type="button" class="link" id="prevBtn">← Question précédente</button><span class="keys">Clavier : touches 0 à 3</span></div>
+  </div>
+  <div class="track" id="track" aria-hidden="true"></div>
+</section>
+<div class="chapter" id="chapter" aria-live="polite"><div class="ch-in"><div class="ch-n" id="chN"></div><div class="ch-f" id="chF"></div><div class="ch-q" id="chQ"></div><div class="ch-m" id="chM"></div></div></div>
+
+<!-- 4. Analyse -->
+<section class="screen" id="s-analyze" aria-label="Analyse">
+  <div class="an">
+    <p class="kicker">Analyse en cours</p>
+    <h2>Nous calculons votre exposition cyber</h2>
+    <div class="an-bar"><i></i></div>
+    <ul class="an-steps" id="anSteps"></ul>
+  </div>
+</section>
+
+<!-- 5. Restitution -->
+<section class="screen scroll" id="s-result" aria-label="Vos résultats"><div class="res" id="res"></div></section>
+
+<!-- 6. Tableau de bord (équipe) -->
+<section class="screen scroll" id="s-dash" aria-label="Tableau de bord"><div class="dwrap"><main id="dash" tabindex="-1"></main></div></section>
+
+<div class="overlay" id="expert" role="dialog" aria-modal="true" aria-labelledby="expH">
+  <div><div class="wave"><i></i><i></i><i></i></div>
+    <p class="kicker" style="color:#000;margin-bottom:14px">Orange Cloud &amp; Cyber Solutions</p><h2 id="expH">Un expert vous rejoint.</h2>
+    <p>Restez devant l’écran : nous reprenons ensemble vos résultats pour bâtir votre feuille de route.</p>
+    <button type="button" class="btn" id="expBack">Revenir à mes résultats</button></div>
+</div>
+<div class="overlay" id="idle" role="dialog" aria-modal="true" aria-labelledby="idleH">
+  <div><div class="cd-num" id="idleN">15</div><h2 id="idleH">Êtes-vous toujours là&nbsp;?</h2>
+    <p>Sans action de votre part, vos réponses seront effacées et l’écran reviendra à l’accueil.</p>
+    <button type="button" class="btn primary" id="idleStay">Je continue</button></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* ======================================================================
+     DONNÉES MÉTIER — reprises à l'identique du diagnostic existant
+     (questions, échelles, niveaux, pondérations, secteurs, offres, cas)
+     ====================================================================== */
+  var FUNCS=[
+    {id:'GV',name:'Gouverner'},{id:'ID',name:'Identifier'},{id:'PR',name:'Protéger'},
+    {id:'DE',name:'Détecter'},{id:'RS',name:'Répondre'},{id:'RC',name:'Rétablir'}
+  ];
+  var SCALE=[
+    {v:0,t:'Inexistant',d:'Rien de tel, ou je ne sais pas'},
+    {v:1,t:'Informel',d:'Fait au cas par cas, rien d’écrit'},
+    {v:2,t:'Formalisé',d:'Écrit, appliqué, avec un responsable'},
+    {v:3,t:'Testé et mesuré',d:'Vérifié par des tests et des indicateurs'}
+  ];
+  var STATUS=['Absent','À formaliser','À tester','Acquis'];
+  var LEVELS=[
+    {n:1,name:'Exposé',txt:'Une attaque passerait sans grande résistance. Commencez par les actions ci-dessous.'},
+    {n:2,name:'Fragile',txt:'Vous avez quelques défenses, mais elles reposent sur des personnes et ne sont ni écrites ni testées.'},
+    {n:3,name:'Solide',txt:'Vos défenses sont écrites et appliquées. Le prochain pas est de les éprouver par des exercices et de les mesurer.'},
+    {n:4,name:'Résilient',txt:'Vous testez, corrigez et améliorez. Gardez le rythme avec des exercices réguliers et des indicateurs suivis.'}
+  ];
+  var THRESHOLDS=[25,50,75]; // score (/100) needed to reach levels 2, 3, 4
+
+  // Base questions, common to every sector. p = tie-break rank (lower first). crit = critical control.
+  var BASE=[
+    {id:'G1',f:0,p:9,q:'Un responsable de la sécurité est désigné, avec un mandat de la direction et un budget identifié.',
+     hint:'Niveau 3 : mandat écrit, budget dédié, point cyber régulier devant la direction.',
+     act:'Nommer un responsable sécurité avec un mandat écrit de la direction, un budget identifié et un point cyber chaque trimestre au comité de direction.',
+     h:30,ref:'NIST CSF 2.0 GV.RR, GV.RM'},
+    {id:'G2',f:0,p:12,q:'Vos fournisseurs critiques (cloud, télécoms, infogérance) sont évalués et tenus par des exigences de sécurité dans leurs contrats.',
+     hint:'Niveau 3 : liste des fournisseurs critiques, clauses de sécurité et de notification d’incident, revue annuelle.',
+     act:'Cartographier vos fournisseurs critiques, ajouter des clauses de sécurité et de notification d’incident, et prévoir une solution de repli pour chacun.',
+     h:90,ref:'NIST CSF 2.0 GV.SC'},
+    {id:'I1',f:1,p:8,q:'Vous disposez d’un inventaire à jour de vos applications, données et systèmes critiques, avec un propriétaire pour chacun.',
+     hint:'Niveau 3 : inventaire revu au moins deux fois par an et utilisé pour décider des priorités.',
+     act:'Dresser l’inventaire des applications, données et systèmes critiques, désigner un propriétaire pour chacun et le revoir deux fois par an.',
+     h:30,ref:'NIST CSF 2.0 ID.AM'},
+    {id:'I2',f:1,p:7,q:'Vous savez quelles activités ne doivent jamais s’arrêter et combien de temps chacune peut l’être.',
+     hint:'Niveau 3 : analyse d’impact réalisée, durée d’arrêt maximale (RTO) et perte de données tolérée (RPO) fixées par activité.',
+     act:'Réaliser une analyse d’impact (BIA) : lister les activités vitales et fixer pour chacune un temps d’arrêt maximal (RTO) et une perte de données tolérée (RPO).',
+     h:90,ref:'ISO 22301 §8.2.2 · NIST CSF 2.0 ID.RA'},
+    {id:'P1',f:2,p:3,crit:true,short:'authentification multifacteur',
+     q:'L’authentification multifacteur protège les accès à distance, la messagerie et tous les comptes administrateurs.',
+     hint:'Niveau 3 : couverture complète, comptes inutilisés supprimés, accès administrateurs revus régulièrement.',
+     act:'Activer l’authentification multifacteur sur les accès à distance, la messagerie et tous les comptes administrateurs, puis supprimer les comptes inutilisés.',
+     h:30,ref:'NIST CSF 2.0 PR.AA'},
+    {id:'P2',f:2,p:11,q:'Les correctifs de sécurité sont appliqués dans des délais définis selon leur criticité.',
+     hint:'Niveau 3 : délais fixés par criticité et taux de respect suivi par un indicateur.',
+     act:'Fixer des délais de correction par niveau de criticité et suivre leur respect avec un indicateur remonté à la direction.',
+     h:90,ref:'NIST CSF 2.0 PR.PS, ID.RA'},
+    {id:'D1',f:3,p:6,q:'Les journaux et alertes de vos systèmes critiques sont surveillés en continu, par une équipe interne ou un centre de supervision externe.',
+     hint:'Niveau 3 : surveillance 24h/24, alertes qualifiées, couverture vérifiée.',
+     act:'Centraliser les journaux des systèmes critiques et mettre en place une surveillance des alertes 24h/24, en interne ou via un centre de supervision (SOC) externalisé.',
+     h:90,ref:'NIST CSF 2.0 DE.CM'},
+    {id:'D2',f:3,p:10,q:'Vous avez des critères pour qualifier la gravité d’un incident et vous mesurez le temps nécessaire pour le détecter.',
+     hint:'Niveau 3 : grille de gravité connue des équipes, délai de détection suivi et amélioré.',
+     act:'Définir une grille de gravité des incidents et mesurer le délai entre le début présumé d’une attaque et sa détection.',
+     h:90,ref:'NIST CSF 2.0 DE.AE'},
+    {id:'R1',f:4,p:1,crit:true,short:'plan de réponse à incident',
+     q:'Un plan de réponse à incident existe : rôles, astreinte, contacts d’urgence et premières actions de confinement.',
+     hint:'Niveau 3 : plan connu des équipes, disponible hors du système d’information, mis à jour après chaque test.',
+     act:'Rédiger un plan de réponse à incident (rôles, astreinte, contacts, premières actions de confinement) et en garder une copie imprimée, hors du système d’information.',
+     h:30,ref:'NIST CSF 2.0 RS.MA'},
+    {id:'R2',f:4,p:4,q:'Une cellule de crise est prête à réunir direction, informatique, juridique et communication, avec des canaux de secours.',
+     hint:'Niveau 3 : membres désignés, messages types prêts, outils de communication indépendants du système habituel.',
+     act:'Constituer une cellule de crise, préparer des messages types (clients, autorités dont l’ANSSI-CI, collaborateurs) et prévoir des canaux de communication de secours.',
+     h:30,ref:'NIST CSF 2.0 RS.CO · ISO 22301 §8.4'},
+    {id:'C1',f:5,p:2,crit:true,short:'sauvegardes isolées et testées',
+     q:'Vos sauvegardes comportent une copie isolée ou immuable et vous avez déjà testé une restauration complète.',
+     hint:'Niveau 3 : copie hors ligne ou immuable, restauration d’un système critique testée au moins une fois par an.',
+     act:'Appliquer la règle 3-2-1 avec une copie isolée ou immuable, et tester la restauration complète d’un système critique au moins une fois par an.',
+     h:30,ref:'NIST CSF 2.0 PR.DS, RC.RP'},
+    {id:'C2',f:5,p:5,q:'Votre plan de continuité et de reprise d’activité a été testé par un exercice de crise au cours des 12 derniers mois.',
+     hint:'Niveau 3 : exercice réalisé, durées de reprise mesurées, retour d’expérience suivi d’actions.',
+     act:'Formaliser le plan de continuité et de reprise à partir de l’analyse d’impact, puis le tester par un exercice de crise chaque année avec retour d’expérience.',
+     h:90,ref:'ISO 22301 §8.5 · NIST CSF 2.0 RC.RP'}
+  ];
+
+  // Sector overlays: extra requirements, heavier weights on base controls, sector standards.
+  var SECTORS=[
+    {id:'gen',name:'Autre secteur ou PME',desc:'Commerce, services, industrie légère',tag:'',
+     std:['NIST CSF 2.0','ISO 22301'],boost:[],items:[]},
+    {id:'bnk',name:'Banque et finance',desc:'Banques, microfinance, paiement',tag:'Banque',
+     std:['ISO/IEC 27001','PCI DSS v4.0','SWIFT CSCF','ISO 22301'],boost:['C1','C2','I2','D1'],
+     items:[
+      {id:'bnk1',f:2,p:.5,crit:true,short:'isolement des systèmes de paiement',
+       q:'Les systèmes de paiement et de virement (cartes, SWIFT, banque en ligne) sont isolés du reste du réseau, et les opérations sensibles exigent une double validation.',
+       hint:'Niveau 3 : environnement isolé, validation à quatre yeux, contrôles audités chaque année.',
+       act:'Isoler les environnements de paiement et de virement, imposer la double validation des opérations sensibles et auditer ces contrôles chaque année.',
+       h:30,ref:'PCI DSS v4.0 · SWIFT CSCF · NIST CSF PR.IR'},
+      {id:'bnk2',f:3,p:3.5,
+       q:'Des règles détectent les opérations anormales (virements inhabituels, accès privilégiés hors horaires) et déclenchent une alerte immédiate.',
+       hint:'Niveau 3 : règles actives, alerte vers l’équipe de crise et la lutte contre la fraude, réglages revus chaque trimestre.',
+       act:'Mettre en place une détection d’anomalies sur les opérations et les accès privilégiés, avec une alerte immédiate vers l’équipe de crise et la lutte contre la fraude.',
+       h:90,ref:'NIST CSF DE.AE · SWIFT CSCF'},
+      {id:'bnk3',f:5,p:.6,crit:true,short:'reprise des services bancaires essentiels',
+       q:'Les services bancaires essentiels (paiement, guichets automatiques, banque mobile) ont une durée de reprise fixée et testée sur un site de secours.',
+       hint:'Niveau 3 : reprise mesurée lors d’un exercice, site de secours opérationnel, preuves conservées.',
+       act:'Fixer et tester la durée de reprise des services essentiels (paiement, guichets automatiques, banque mobile) sur un site de secours, et conserver la preuve des tests pour le régulateur.',
+       h:90,ref:'ISO 22301 §8.5 · exigences du régulateur bancaire'}
+     ]},
+    {id:'ins',name:'Assurance',desc:'Assureurs, courtiers, mutuelles',tag:'Assurance',
+     std:['ISO/IEC 27001','ISO 22301','Loi sur la protection des données (ARTCI)'],boost:['G2','C2'],
+     items:[
+      {id:'ins1',f:2,p:.7,crit:true,short:'protection des données des assurés',
+       q:'Les données des assurés (identité, santé, sinistres) sont chiffrées, et leur consultation est limitée et tracée.',
+       hint:'Niveau 3 : chiffrement en place, accès au strict besoin, journal de chaque consultation contrôlé.',
+       act:'Chiffrer les données des assurés, limiter les accès au strict besoin et conserver une trace de chaque consultation.',
+       h:30,ref:'NIST CSF PR.DS · loi sur la protection des données (ARTCI)'},
+      {id:'ins2',f:0,p:3.5,
+       q:'Courtiers, agents généraux et prestataires de gestion de sinistres ont des exigences de sécurité écrites, et leurs accès à votre système sont contrôlés.',
+       hint:'Niveau 3 : exigences contractuelles, accès limités et revus, évaluation annuelle des partenaires.',
+       act:'Fixer par écrit des exigences de sécurité aux courtiers, agents et prestataires, limiter leurs accès au strict besoin et les évaluer chaque année.',
+       h:90,ref:'NIST CSF GV.SC'},
+      {id:'ins3',f:5,p:3.6,
+       q:'Le traitement des sinistres et l’émission des contrats peuvent continuer en mode dégradé pendant une panne.',
+       hint:'Niveau 3 : procédure manuelle écrite, délai toléré défini, mode dégradé testé.',
+       act:'Définir un mode dégradé pour les sinistres et la souscription (procédure manuelle, délai toléré, priorité aux dossiers urgents) et le tester.',
+       h:90,ref:'ISO 22301 §8.4'}
+     ]},
+    {id:'gov',name:'Administration publique',desc:'Ministères, agences, collectivités',tag:'Administration',
+     std:['ISO/IEC 27001','ISO 22301','Cadre national (ANSSI-CI)'],boost:['G1','G2','R2'],
+     items:[
+      {id:'gov1',f:1,p:.7,crit:true,short:'recensement des services vitaux',
+       q:'Les services vitaux aux citoyens (état civil, impôts, paie, identification) sont recensés avec les systèmes et les données qui les portent.',
+       hint:'Niveau 3 : liste validée, responsable par service, durée d’interruption tolérée fixée.',
+       act:'Recenser les services vitaux aux citoyens, les systèmes qui les portent et leur responsable, puis fixer une durée d’interruption tolérée pour chacun.',
+       h:30,ref:'NIST CSF ID.AM · ISO 22301 §8.2.2'},
+      {id:'gov2',f:2,p:3.5,
+       q:'Les données sensibles de l’État sont hébergées dans des lieux maîtrisés et chiffrées, avec une clause de réversibilité chez les prestataires.',
+       hint:'Niveau 3 : lieux d’hébergement connus, chiffrement, réversibilité testée.',
+       act:'Vérifier où sont hébergées les données sensibles, les chiffrer et imposer aux prestataires une clause de réversibilité (récupération des données en fin de contrat).',
+       h:90,ref:'NIST CSF PR.DS, GV.SC'},
+      {id:'gov3',f:4,p:3.6,
+       q:'Vous avez un contact et une procédure d’alerte avec le centre national de réponse (ANSSI-CI) et avec les autres administrations touchées.',
+       hint:'Niveau 3 : point de contact désigné, procédure écrite, exercice commun réalisé.',
+       act:'Désigner un point de contact pour l’ANSSI-CI, écrire la procédure d’alerte entre administrations et la tester lors d’un exercice commun.',
+       h:30,ref:'NIST CSF RS.CO'}
+     ]},
+    {id:'ene',name:'Énergie et pétrole',desc:'Production, raffinage, distribution',tag:'Énergie',
+     std:['IEC 62443','NIST SP 800-82','ISO/IEC 27001','ISO 22301'],boost:['I1','P1','R1'],
+     items:[
+      {id:'ene1',f:2,p:.5,crit:true,short:'séparation des réseaux industriels',
+       q:'Les réseaux industriels (automates, supervision) sont séparés du réseau bureautique, avec des zones et des passerelles contrôlées.',
+       hint:'Niveau 3 : zones définies, passerelles filtrées et surveillées, schéma à jour.',
+       act:'Séparer les réseaux industriels du réseau bureautique en zones, avec des passerelles filtrées et surveillées (modèle zones et conduits).',
+       h:90,ref:'IEC 62443-3-2 · NIST SP 800-82'},
+      {id:'ene2',f:2,p:3.5,
+       q:'Les accès à distance des constructeurs et prestataires aux installations sont limités dans le temps, authentifiés et enregistrés.',
+       hint:'Niveau 3 : accès ouvert à la demande, authentification forte, session enregistrée.',
+       act:'Ouvrir les accès des prestataires seulement à la demande, avec authentification forte et enregistrement de chaque session.',
+       h:30,ref:'IEC 62443 · NIST CSF PR.AA'},
+      {id:'ene3',f:5,p:.6,crit:true,short:'mode de repli manuel',
+       q:'Un mode de fonctionnement dégradé ou manuel garantit la sécurité des personnes et des installations en cas de perte du système de contrôle.',
+       hint:'Niveau 3 : procédures de repli écrites, personnel formé, exercice réalisé.',
+       act:'Écrire et exercer les procédures de repli manuel qui garantissent la sécurité des personnes et des installations en cas de perte du système de contrôle.',
+       h:90,ref:'NIST SP 800-82 · ISO 22301 §8.4'}
+     ]},
+    {id:'def',name:'Défense et sécurité',desc:'Armée, gendarmerie, police, renseignement',tag:'Défense',
+     std:['ISO/IEC 27001','ISO 22301','Doctrine nationale de protection'],boost:['G2','P1','R1'],
+     items:[
+      {id:'def1',f:2,p:.5,crit:true,short:'cloisonnement de l’information classifiée',
+       q:'L’information classifiée est cloisonnée par niveau et accessible seulement aux personnes habilitées qui en ont besoin.',
+       hint:'Niveau 3 : réseaux séparés par niveau, habilitations revues régulièrement, accès tracés.',
+       act:'Cloisonner réseaux et données par niveau de classification, appliquer l’accès au strict besoin et revoir les habilitations régulièrement.',
+       h:30,ref:'NIST CSF PR.AA, PR.DS'},
+      {id:'def2',f:0,p:3.5,
+       q:'Le matériel et les logiciels sensibles viennent de sources maîtrisées, et les supports amovibles sont contrôlés.',
+       hint:'Niveau 3 : provenance vérifiée, supports amovibles interdits ou contrôlés, audits réguliers.',
+       act:'Maîtriser la provenance du matériel et des logiciels sensibles, et contrôler strictement les clés USB et supports amovibles.',
+       h:90,ref:'NIST CSF GV.SC, PR.PS'},
+      {id:'def3',f:5,p:.6,crit:true,short:'canal de commandement de secours',
+       q:'Les communications de commandement disposent d’un canal de secours indépendant du réseau principal, testé en exercice.',
+       hint:'Niveau 3 : canal de secours déployé, personnel formé, bascule testée.',
+       act:'Prévoir un canal de communication de commandement de secours, indépendant du réseau principal, et le tester lors d’exercices.',
+       h:90,ref:'ISO 22301 §8.4, §8.5 · NIST CSF RC.RP'}
+     ]},
+    {id:'hlt',name:'Santé et hôpitaux',desc:'Hôpitaux, cliniques, laboratoires',tag:'Santé',
+     std:['ISO 27799','ISO/IEC 27001','ISO 22301','Loi sur la protection des données (ARTCI)'],boost:['I2','C1','C2'],
+     items:[
+      {id:'hlt1',f:5,p:.5,crit:true,short:'mode dégradé des soins',
+       q:'Les urgences, les blocs et les soins peuvent continuer en mode dégradé (dossiers papier, procédures manuelles) pendant une panne informatique.',
+       hint:'Niveau 3 : fiches papier prêtes, procédures connues du personnel, mode dégradé exercé.',
+       act:'Préparer et exercer le mode dégradé des soins : fiches papier, procédures manuelles et priorité aux urgences, accessibles hors système informatique.',
+       h:30,ref:'ISO 22301 §8.4 · ISO 27799'},
+      {id:'hlt2',f:1,p:3.5,
+       q:'Les dispositifs biomédicaux connectés (imagerie, moniteurs, pompes) sont inventoriés et séparés du réseau administratif.',
+       hint:'Niveau 3 : inventaire à jour, réseau dédié, mises à jour planifiées avec les fournisseurs.',
+       act:'Inventorier les dispositifs biomédicaux connectés, les séparer du réseau administratif et planifier leur mise à jour avec les fournisseurs.',
+       h:90,ref:'NIST CSF ID.AM, PR.IR'},
+      {id:'hlt3',f:2,p:3.6,
+       q:'Les dossiers patients sont protégés par des droits d’accès selon le métier, et chaque consultation est tracée.',
+       hint:'Niveau 3 : droits par profil, journal contrôlé, alerte en cas d’accès inhabituel.',
+       act:'Définir les droits d’accès aux dossiers patients par métier, tracer chaque consultation et contrôler le journal régulièrement.',
+       h:90,ref:'ISO 27799 · loi sur la protection des données (ARTCI)'}
+     ]},
+    {id:'tel',name:'Télécoms et opérateurs',desc:'Réseaux, services de communication',tag:'Télécoms',
+     std:['ISO/IEC 27011','ISO/IEC 27001','ISO 22301'],boost:['D1','C2','R2'],
+     items:[
+      {id:'tel1',f:2,p:.5,crit:true,short:'redondance du cœur de réseau',
+       q:'Le cœur de réseau, les plateformes de service et les liaisons principales sont redondés sur plusieurs sites.',
+       hint:'Niveau 3 : redondance sur plusieurs sites, bascules testées, capacité vérifiée.',
+       act:'Redonder le cœur de réseau, les plateformes de service et les liaisons principales sur plusieurs sites, et tester les bascules.',
+       h:90,ref:'NIST CSF PR.IR · ISO/IEC 27011'},
+      {id:'tel2',f:2,p:3.5,
+       q:'Les accès d’administration aux équipements réseau passent par des postes dédiés, avec authentification forte et enregistrement des actions.',
+       hint:'Niveau 3 : postes dédiés, authentification forte, actions enregistrées et revues.',
+       act:'Réserver l’administration des équipements réseau à des postes dédiés, avec authentification forte et enregistrement de toutes les actions.',
+       h:30,ref:'NIST CSF PR.AA · ISO/IEC 27011'},
+      {id:'tel3',f:4,p:3.6,
+       q:'Un plan de communication de crise prévoit l’information des clients, du régulateur et des services d’urgence en cas de coupure majeure.',
+       hint:'Niveau 3 : messages types prêts, contacts à jour, plan exercé.',
+       act:'Préparer un plan de communication de crise : messages types pour les clients, le régulateur et les services d’urgence, avec des contacts à jour.',
+       h:30,ref:'NIST CSF RS.CO'}
+     ]}
+  ];
+
+  // Orange offers, triggered when any linked question scores below 3.
+  var OFFERS=[
+    {id:'dia',name:'Cyber Diag',qs:['G1','G2','I1','I2','P1','P2'],fn:'Prévenir (gouvernance, inventaire, protection)',
+     txt:'Un diagnostic de cybersécurité qui évalue votre niveau de maturité et aboutit à un plan d’action priorisé, pour passer de cette auto-évaluation à une feuille de route complète.'},
+    {id:'soc',name:'Orange SOC',qs:['D1','D2'],fn:'Détecter',
+     txt:'Une offre de supervision de sécurité de dernière génération, pour détecter et qualifier les attaques avant qu’elles ne bloquent votre activité.'},
+    {id:'bkp',name:'Sauvegarde Cloud',qs:['C1','C2'],fn:'Rétablir',
+     txt:'Une sauvegarde hébergée dans nos 3 datacenters certifiés Tier 3+ et ISO 27001, qui permet un scénario de continuité et de reprise d’activité.'}
+  ];
+
+  /* ---------- Real incidents used as discussion cases (public sources, paraphrased) ---------- */
+  var LABELS={
+    P1:'Authentification multifacteur',C1:'Sauvegardes isolées',C2:'Plan de reprise testé',R1:'Plan de réponse à incident',
+    R2:'Cellule de crise',D1:'Surveillance',G2:'Fournisseurs',I1:'Inventaire des actifs',I2:'Analyse d’impact',
+    bnk1:'Isolement des paiements',bnk2:'Détection des opérations anormales',ins1:'Protection des données des assurés',
+    gov1:'Services vitaux recensés',gov3:'Alerte avec l’ANSSI-CI',ene1:'Séparation des réseaux industriels',
+    def2:'Chaîne d’approvisionnement',def3:'Canal de commandement de secours',hlt1:'Mode dégradé des soins',
+    tel1:'Redondance du réseau',tel2:'Administration des équipements réseau',
+    G1:'Responsable sécurité',P2:'Correctifs',D2:'Qualification des incidents'
+  };
+  var CASES=[
+    {id:'bgd',sectors:['bnk'],org:'Bangladesh Bank',date:'Février 2016',
+     title:'Des virements SWIFT frauduleux depuis une banque centrale',
+     facts:['Des pirates ont émis 35 ordres de virement via SWIFT pour près d’un milliard de dollars. Cinq ordres, soit 101 millions, ont été payés.',
+            'Un logiciel espion a capté les identifiants SWIFT. Les machines reliées à SWIFT n’étaient ni surveillées ni protégées par un pare-feu.',
+            'L’attaque a eu lieu un week-end, et les demandes d’arrêt sont tombées sur des jours fériés à l’étranger. Environ 18 millions sur les 81 envoyés aux Philippines ont été récupérés.',
+            'Un virement de 20 millions a été bloqué parce qu’une banque correspondante a repéré une faute de frappe.'],
+     lesson:'Un seul jeu d’identifiants volé a suffi pour autoriser des opérations massives : la double validation, l’isolement et la surveillance en temps réel faisaient défaut.',
+     debate:'Qui peut valider un virement de plusieurs dizaines de millions un vendredi soir chez vous, et qui répond si la banque correspondante est fermée ?',
+     links:['bnk1','bnk2','R2'],
+     src:{l:'ISACA Journal',u:'https://www.isaca.org/resources/isaca-journal/issues/2023/volume-6/lessons-learned-from-the-bangladesh-bank-heist'}},
+    {id:'cap',sectors:['bnk'],org:'Capital One (banque, États-Unis)',date:'2019',
+     title:'Les données de plus de 100 millions de clients, stockées dans le cloud',
+     facts:['Environ 100 millions de clients aux États-Unis et 6 millions au Canada ont été touchés. Les données étaient stockées chez AWS.',
+            'Une mauvaise configuration a permis à une personne extérieure d’atteindre ces données.',
+            'Le régulateur américain (OCC) a infligé 80 millions de dollars d’amende : les risques n’avaient pas été bien évalués avant la migration de systèmes importants vers le cloud, et les failles corrigées trop lentement.'],
+     lesson:'Passer au cloud ne transfère pas la responsabilité : la configuration et l’évaluation des risques restent à la charge de la banque.',
+     debate:'Qui vérifie chez vous la configuration de vos environnements cloud, et à quelle fréquence ?',
+     links:['G2','I1'],
+     src:{l:'Finextra',u:'https://finextra.com/newsarticle/36349/capital-one-fined-80m-for-massive-2019-hack'}},
+    {id:'med',sectors:['ins'],org:'Medibank (assureur santé, Australie)',date:'Octobre 2022',
+     title:'Des données de santé de millions d’assurés publiées',
+     facts:['L’intrusion a été détectée le 12 octobre 2022. Environ 9,7 millions de clients actuels et anciens étaient concernés.',
+            'Des données de remboursements (lieux de soins, codes de diagnostic et d’actes) de plusieurs centaines de milliers d’assurés ont été prises. Des numéros de passeport d’étudiants étrangers aussi.',
+            'Medibank a refusé de payer la rançon. Les attaquants ont ensuite publié des données sur le dark web.'],
+     lesson:'Pour un assureur, la donnée de santé est l’actif le plus exposé : une fuite ne se répare pas en restaurant une sauvegarde.',
+     debate:'Payer ou non ? Cette décision doit être discutée avec le juridique et la direction avant la crise, pas pendant.',
+     links:['ins1','R2'],
+     src:{l:'The Hacker News',u:'https://thehackernews.com/2022/11/medibank-refuses-to-pay-ransom-after-97.html'}},
+    {id:'cna',sectors:['ins'],org:'CNA Financial (assureur, États-Unis)',date:'Mars 2021',
+     title:'Un grand assureur bloqué par un rançongiciel',
+     facts:['La société a reconnu l’incident et indiqué en mai 2021 que ses systèmes de polices, de sinistres et de souscription n’étaient pas touchés.',
+            'Selon la presse (Bloomberg), environ 40 millions de dollars auraient été versés après une demande de 60 millions. La société n’a pas confirmé ce montant.',
+            'Elle a indiqué avoir consulté le FBI et l’administration américaine chargée des sanctions (OFAC) au sujet des attaquants.'],
+     lesson:'Payer une rançon n’est pas qu’une décision financière : il faut aussi vérifier que le groupe n’est pas sous sanctions.',
+     debate:'Qui décide chez vous de payer ou non, avec quels conseils juridiques, et dans quel délai ?',
+     links:['R2','C1'],
+     caveat:'Le paiement est rapporté par la presse et n’a pas été confirmé par la société.',
+     src:{l:'Insurance Journal',u:'https://www.insurancejournal.com/news/national/2021/05/21/615373.htm'}},
+    {id:'cri',sectors:['gov'],org:'Costa Rica (État)',date:'Avril 2022',
+     title:'Un pays déclare l’état d’urgence nationale',
+     facts:['Dès le 17 avril 2022, près de 30 institutions publiques ont été touchées, dont le ministère des Finances (impôts et douanes).',
+            'Les douanes ont travaillé sur papier et les délais fiscaux ont été prolongés. Le système fiscal n’a été rétabli que mi-juin, environ deux mois plus tard.',
+            'Le gouvernement a refusé de payer les 10 millions de dollars demandés et a déclaré l’état d’urgence nationale le 8 mai.',
+            'Fin mai, le système de la caisse de sécurité sociale a été touché à son tour : des milliers de rendez-vous médicaux ont été manqués.'],
+     lesson:'Une attaque contre l’État peut paralyser en même temps impôts, douanes, paie et santé. La continuité doit se penser entre administrations.',
+     debate:'Quels services de votre administration peuvent tourner sur papier pendant deux mois, et lesquels non ?',
+     links:['gov1','gov3','C2'],
+     src:{l:'Wikipedia',u:'https://en.wikipedia.org/wiki/2022_Costa_Rican_ransomware_attack'}},
+    {id:'ken',sectors:['gov'],org:'Kenya (portail eCitizen)',date:'Juillet 2023',
+     title:'Une attaque par saturation vise les services publics en ligne',
+     facts:['Le portail eCitizen, utilisé notamment pour les demandes de visa et l’enregistrement d’entreprises, a été rendu intermittent par une attaque par déni de service distribué (DDoS).',
+            'Le groupe Anonymous Sudan a revendiqué l’attaque, qui a aussi visé une grande banque, un opérateur mobile, des hôpitaux et des universités.',
+            'Le gouvernement a indiqué qu’aucune donnée n’avait été consultée ni perdue.'],
+     lesson:'Une attaque qui ne vole aucune donnée peut quand même bloquer pendant plusieurs jours les services aux citoyens et aux entreprises.',
+     debate:'Si votre portail en ligne est saturé demain, quel est le service de repli pour les citoyens (guichet, papier, autre canal) ?',
+     links:['gov1','D1'],
+     caveat:'La responsabilité d’Anonymous Sudan est une revendication du groupe.',
+     src:{l:'TechCabal',u:'https://techcabal.com/2023/07/27/pro-sudan-hackers-attack-digital-services-in-kenya/'}},
+    {id:'col',sectors:['ene','gen'],org:'Colonial Pipeline (oléoduc, États-Unis)',date:'Mai 2021',
+     title:'Une facturation en panne arrête un oléoduc',
+     facts:['Le 7 mai 2021, un rançongiciel a touché les systèmes informatiques et de facturation. L’exploitant a arrêté tout l’oléoduc par précaution pendant environ six jours.',
+            'Les attaquants sont entrés avec le mot de passe d’un compte VPN inactif, sans authentification multifacteur.',
+            'Environ 4,4 millions de dollars ont été payés, mais l’outil de déchiffrement était lent et l’entreprise s’est appuyée sur ses sauvegardes. Des stations-service ont manqué de carburant dans plusieurs États.'],
+     lesson:'Les systèmes de pompage n’ont pas été touchés, mais l’arrêt de la facturation a suffi à bloquer l’activité : l’informatique de gestion est une dépendance critique.',
+     debate:'Si votre système de facturation ou de gestion tombe, pouvez-vous continuer à livrer, et pendant combien de temps ?',
+     links:['ene1','P1','I2'],
+     src:{l:'Wikipedia',u:'https://en.wikipedia.org/wiki/Colonial_Pipeline_ransomware_attack'}},
+    {id:'ara',sectors:['ene'],org:'Saudi Aramco (pétrole, Arabie saoudite)',date:'Août 2012',
+     title:'30 000 postes de travail effacés',
+     facts:['Le 15 août 2012, un logiciel destructeur a effacé les données et le secteur de démarrage d’environ 30 000 postes de travail.',
+            'L’entreprise a indiqué que ses systèmes de production et d’exploration, isolés, n’avaient pas été touchés. Des témoignages contestent une reprise rapide des activités commerciales : des camions-citernes n’auraient pas pu charger pendant des jours.',
+            'Selon l’entreprise, les employés ont repris le travail le 25 août après la remise en état des postes.'],
+     lesson:'Selon l’entreprise, l’isolement des réseaux de production a protégé l’extraction. Les postes de gestion, eux, ont dû être nettoyés et remis en service.',
+     debate:'Avez-vous une procédure et du matériel prêts pour réinstaller des milliers de postes en quelques jours ?',
+     links:['C1','C2','ene1'],
+     caveat:'La revendication d’un groupe et la durée réelle de la perturbation commerciale restent contestées.',
+     src:{l:'Wikipedia',u:'https://en.wikipedia.org/wiki/Shamoon'}},
+    {id:'via',sectors:['def'],org:'Viasat KA-SAT (satellite, Europe)',date:'Février 2022',
+     title:'Des milliers de modems rendus inutilisables',
+     facts:['Le 24 février 2022, une attaque contre le réseau satellitaire KA-SAT a mis hors service des milliers de modems en Ukraine, dont certains utilisés par des services militaires et gouvernementaux. Des dizaines de milliers de clients en Europe ont aussi été touchés.',
+            'Les attaquants ont exploité une mauvaise configuration d’un équipement VPN pour atteindre le réseau de gestion, puis envoyé des commandes qui ont effacé la mémoire des modems.',
+            'Viasat a expédié environ 30 000 modems de remplacement. Le Royaume-Uni, les États-Unis et l’Union européenne ont attribué l’attaque à la Russie, qui le dément.'],
+     lesson:'La chaîne de communication d’un prestataire peut devenir le point faible : un accès de gestion mal configuré a suffi.',
+     debate:'Vos communications de commandement dépendent-elles d’un seul prestataire, et que se passe-t-il le jour où ses terminaux sont hors service ?',
+     links:['def3','def2','G2'],
+     caveat:'Les cas publics détaillés sont rares dans ce secteur, pour des raisons de confidentialité. L’attribution vient des gouvernements concernés.',
+     src:{l:'CCDCOE Cyber Law Toolkit',u:'https://cyberlaw.ccdcoe.org/wiki/Viasat_KA-SAT_attack_(2022)'}},
+    {id:'hse',sectors:['hlt'],org:'HSE (santé publique, Irlande)',date:'Mai 2021',
+     title:'Tout un système de santé coupé du jour au lendemain',
+     facts:['Les attaquants étaient dans les systèmes depuis environ huit semaines. Une alerte de l’antivirus du 31 mars n’a pas pu bloquer l’activité, car l’outil était en mode surveillance seule.',
+            'Le 14 mai 2021, tous les systèmes informatiques de la HSE ont été coupés au niveau national. Des rendez-vous et des examens de radiologie ont été annulés, et des hôpitaux sont passés aux dossiers papier.',
+            'Le gouvernement a refusé de payer. Plus de 95 % des serveurs et appareils étaient rétablis en septembre. Le rapport indépendant a pointé un système ancien et fragmenté, non conçu pour résister aux attaques.'],
+     lesson:'Huit semaines de présence sans réaction : la détection compte autant que la protection.',
+     debate:'Vos hôpitaux ou cliniques ont-ils déjà simulé une journée entière sans informatique ?',
+     links:['D1','hlt1','R1'],
+     src:{l:'Wikipedia',u:'https://en.wikipedia.org/wiki/Health_Service_Executive_ransomware_attack'}},
+    {id:'nhl',sectors:['hlt','gen'],org:'NHLS (laboratoires publics, Afrique du Sud)',date:'Juin 2024',
+     title:'Résultats d’analyses bloqués, serveur de sauvegarde supprimé',
+     facts:['Fin juin 2024, un rançongiciel a rendu inaccessibles des systèmes du service national de laboratoires.',
+            'Les laboratoires ont continué d’analyser les échantillons, mais l’envoi automatique des résultats aux cliniciens était coupé. Les résultats urgents ont été transmis par téléphone.',
+            'Des parties des systèmes ont été supprimées, dont le serveur de sauvegarde, et ont dû être reconstruites. L’organisme a indiqué qu’aucune donnée de patient n’avait été perdue ni compromise, selon l’enquête préliminaire.'],
+     lesson:'Une sauvegarde accessible depuis le réseau attaqué peut être détruite avec le reste : c’est l’isolement de la copie qui permet de restaurer.',
+     debate:'Où est votre copie de sauvegarde, et pourrait-elle être effacée par quelqu’un qui contrôle votre réseau ?',
+     links:['C1','hlt1','R1'],
+     src:{l:'SAnews (gouvernement sud-africain)',u:'https://www.sanews.gov.za/south-africa/national-health-laboratory-service-hit-cyber-attack'}},
+    {id:'kyi',sectors:['tel'],org:'Kyivstar (opérateur mobile, Ukraine)',date:'Décembre 2023',
+     title:'Le plus grand opérateur du pays hors service',
+     facts:['Le 12 décembre 2023, une attaque a coupé la téléphonie mobile et l’internet pendant environ deux jours, avec des effets sur des alertes aériennes, des distributeurs et des terminaux de paiement.',
+            'Selon le dirigeant, les attaquants ont détruit certaines fonctions du cœur de réseau, après être entrés par le compte compromis d’un salarié.',
+            'L’opérateur et les services de sécurité ont eux-mêmes coupé le réseau entier dès la détection. La plupart des services étaient rétablis le 14 décembre.'],
+     lesson:'Quand un opérateur tombe, banques, alertes et paiements tombent avec lui : la continuité des communications est une priorité nationale.',
+     debate:'Le jour où votre opérateur principal est coupé, comment votre cellule de crise communique-t-elle, et avec quel second opérateur ?',
+     links:['tel1','tel2','R2'],
+     caveat:'Le groupe Solntsepek a revendiqué l’attaque. L’enquête était toujours en cours à la date de la source.',
+     src:{l:'The Record',u:'https://therecord.media/ukraine-kyivstar-hack-high-impact'}},
+    {id:'opt',sectors:['tel'],org:'Optus (opérateur, Australie)',date:'Septembre 2022',
+     title:'Des pièces d’identité de clients exposées',
+     facts:['Optus a annoncé l’attaque le 22 septembre 2022. Noms, dates de naissance et contacts ont été exposés, et pour une partie des clients des numéros de permis de conduire ou de passeport.',
+            'L’attaquant a demandé 1 million de dollars, puis a dit avoir supprimé les données après la publication d’un échantillon.',
+            'Selon un journaliste spécialisé, l’accès s’est fait par une interface de programmation (API) non authentifiée et publiquement accessible. Optus n’a pas publié de détails.'],
+     lesson:'Conserver longtemps des données d’identité et laisser des interfaces sans authentification multiplie le risque.',
+     debate:'Combien de temps gardez-vous les pièces d’identité de vos clients, et qui contrôle vos API ?',
+     links:['I1','tel2'],
+     caveat:'Le mode d’intrusion décrit vient d’un journaliste, pas d’Optus.',
+     src:{l:'The Hacker News',u:'https://thehackernews.com/2022/09/hacker-behind-optus-breach-releases.html'}}
+  ];
+
+  /* ======================================================================
+     LOGIQUE DE CALCUL — reprise à l'identique (buildQs, scoreFor, offres, priorités)
+     ====================================================================== */
+  function newState(){return {step:-1,view:'diag',sector:null,qs:[],answers:{},org:'',consent:true,saveStarted:false,pendingRec:null,pendingId:null,pendingOrg:'',saveMsg:''}}
+  var state=newState();
+
+  function sectorObj(){return SECTORS.filter(function(s){return s.id===state.sector})[0]||null}
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function fmtDate(){return new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}
+
+  function buildQs(sector){
+    var boost={};sector.boost.forEach(function(id){boost[id]=true});
+    var base=BASE.map(function(q){return Object.assign({},q,{w:boost[q.id]?1.5:1,crit:!!q.crit,sector:false})});
+    var extra=sector.items.map(function(q){return Object.assign({},q,{w:q.crit?2:1.5,crit:!!q.crit,sector:true})});
+    return base.concat(extra).map(function(q,i){return [q,i]})
+      .sort(function(a,b){return a[0].f-b[0].f||a[1]-b[1]})
+      .map(function(x){return x[0]});
+  }
+  function levelIndex(pct){return pct<THRESHOLDS[0]?0:pct<THRESHOLDS[1]?1:pct<THRESHOLDS[2]?2:3}
+  function ans(q){var a=state.answers[q.id];return typeof a==='number'?a:0}
+  function scoreFor(qs,answers){
+    function a(q){var v=answers[q.id];return typeof v==='number'?v:0}
+    var num=FUNCS.map(function(){return 0}),den=FUNCS.map(function(){return 0});
+    var sn=0,sd=0;
+    qs.forEach(function(q){var v=a(q);num[q.f]+=q.w*v;den[q.f]+=3*q.w;sn+=q.w*v;sd+=3*q.w});
+    var fs=num.map(function(n,i){return den[i]?n/den[i]:0});
+    var pct=sd?Math.round(sn/sd*100):0;
+    var idx=levelIndex(pct),capped=false,capQ=null,capIdx=null,worst=null;
+    qs.forEach(function(q){if(q.crit&&(worst===null||a(q)<a(worst)))worst=q});
+    if(worst){
+      var w=a(worst),limit=w===0?1:w===1?2:3;
+      if(idx>limit){idx=limit;capped=true;capQ=worst;capIdx=limit}
+    }
+    return {fs:fs,pct:pct,level:LEVELS[idx],capped:capped,capQ:capQ,capLevel:capIdx===null?null:LEVELS[capIdx]};
+  }
+  function compute(){return scoreFor(state.qs,state.answers)}
+  function offersFor(qs,answers){
+    return OFFERS.filter(function(o){
+      return qs.some(function(q){return o.qs.indexOf(q.id)>-1&&!(answers[q.id]>=3)});
+    });
+  }
+  function priorities(){
+    return state.qs.filter(function(q){return ans(q)<3})
+      .map(function(q){return {q:q,a:ans(q),gap:q.w*(3-ans(q))}})
+      .sort(function(x,y){return y.gap-x.gap||x.q.p-y.q.p})
+      .slice(0,5);
+  }
+  function triggeredOffers(){return offersFor(state.qs,state.answers)}
+  function qById(id){return state.qs.filter(function(q){return q.id===id})[0]||null}
+  function casesFor(){
+    function rel(c){return (c.links||[]).filter(function(id){var q=qById(id);return q&&ans(q)<3}).length}
+    var local=CASES.filter(function(c){return c.local});
+    var others=CASES.filter(function(c){return !c.local&&c.sectors.indexOf(state.sector)>-1})
+      .map(function(c,i){return {c:c,i:i,r:rel(c)}})
+      .sort(function(a,b){return b.r-a.r||a.i-b.i})
+      .map(function(x){return x.c});
+    return local.concat(others);
+  }
+  function summaryText(r,pr){
+    var s=sectorObj();
+    var L=['Diagnostic de résilience cyber (NIST CSF 2.0 · ISO 22301)',
+      (state.org?state.org+' · ':'')+s.name+' · '+fmtDate(),
+      'Score : '+r.pct+'/100 · Niveau '+r.level.n+' '+r.level.name+(r.capped?' (plafonné : '+r.capQ.short+')':''),'',
+      'Score par fonction :'];
+    FUNCS.forEach(function(f,i){L.push('- '+f.name+' : '+Math.round(r.fs[i]*100)+' %')});
+    L.push('','Priorités :');
+    pr.forEach(function(x,i){L.push((i+1)+'. '+x.q.act+' (sous '+x.q.h+' jours)')});
+    var of=triggeredOffers();
+    if(of.length){L.push('','Réponses Orange :');of.forEach(function(o){L.push('- '+o.name+' : '+o.txt)})}
+    return L.join('\n');
+  }
+
+  /* ======================================================================
+     NARRATION — textes d'expérience (accroches, chapitres, lecture dirigeant)
+     ====================================================================== */
+  var HOOKS=[
+    'Où se trouve votre dernière sauvegarde intacte ?',
+    'Qui décide de payer, ou non, une rançon ?',
+    'Combien de jours pouvez-vous tenir sans informatique ?',
+    'Détecteriez-vous un intrus présent depuis huit semaines ?',
+    'Qui prévient vos clients et les autorités, et en combien de temps ?'
+  ];
+  var CHAPTERS=[
+    {q:'Qui pilote la sécurité au plus haut niveau ?'},
+    {q:'Savez-vous ce que vous devez protéger ?'},
+    {q:'Vos portes d’entrée sont-elles verrouillées ?'},
+    {q:'Détecteriez-vous une attaque en cours ?'},
+    {q:'Qui agit dans la première heure ?'},
+    {q:'En combien de temps repartez-vous ?'}
+  ];
+  var FN_STRONG=[
+    'La sécurité est portée par la direction, avec un responsable et des moyens.',
+    'Vous savez ce qui compte le plus et combien de temps cela peut s’arrêter.',
+    'Les principales portes d’entrée de votre système sont verrouillées.',
+    'Vous gardez les yeux ouverts sur vos systèmes critiques.',
+    'Vos équipes savent qui fait quoi dès la première heure.',
+    'Vous savez repartir : sauvegardes et reprise sont éprouvées.'
+  ];
+  var FN_RISK=[
+    'Sans pilotage clair, la sécurité reste un sujet technique, sans arbitrage ni budget.',
+    'Vous ne pouvez pas protéger ce que vous ne connaissez pas : priorités et durées d’arrêt restent floues.',
+    'Vos accès et vos systèmes offrent des portes d’entrée faciles à un attaquant.',
+    'Une attaque pourrait progresser des semaines avant d’être repérée.',
+    'Les premières heures d’une crise se joueraient dans l’improvisation.',
+    'Le retour à la normale pourrait prendre des semaines, voire échouer.'
+  ];
+  var SICONS={
+    gen:'<path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/>',
+    bnk:'<path d="M3 21h18M4 10h16M12 3l9 5H3l9-5zM6 10v8M10 10v8M14 10v8M18 10v8"/>',
+    ins:'<path d="M12 3a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9zM12 12v7a2 2 0 0 1-4 0"/>',
+    gov:'<path d="M3 21h18M5 21v-9M19 21v-9M9 21v-9M15 21v-9M3 12h18M12 3c3 0 6 3 6 6H6c0-3 3-6 6-6z"/>',
+    ene:'<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/>',
+    def:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M12 8l1.2 2.5 2.8.4-2 1.9.5 2.7-2.5-1.3-2.5 1.3.5-2.7-2-1.9 2.8-.4z"/>',
+    hlt:'<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
+    tel:'<path d="M12 10v11M8 21h8M9.5 10.5L12 4l2.5 6.5M5 6a9 9 0 0 0 0 10M19 6a9 9 0 0 1 0 10M8 8.5a5 5 0 0 0 0 5M16 8.5a5 5 0 0 1 0 5"/>'
+  };
+
+
+  /* ======================================================================
+     SONS — synthétisés en direct (Web Audio), aucun fichier externe
+     ====================================================================== */
+  var Sound=(function(){
+    /* Palette « centre de supervision » : impacts graves, clics secs, signaux brefs filtrés, léger écho.
+       Pas de mélodie ni d'accord : seulement des textures et des signaux d'interface. */
+    var ctx=null,out=null,send=null,muted=false,lastTick=0,noiseBuf=null;
+    try{muted=localStorage.getItem('ccs-cyberdiag-son')==='0'}catch(e){}
+    function ensure(){
+      try{
+        if(!ctx){
+          var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;ctx=new AC();
+          var comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.ratio.value=4;comp.connect(ctx.destination);
+          var lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=9000;lp.connect(comp);
+          out=ctx.createGain();out.gain.value=.8;out.connect(lp);
+          // écho discret (espace « salle de contrôle »)
+          var dl=ctx.createDelay(1),fb=ctx.createGain(),wet=ctx.createGain(),dlp=ctx.createBiquadFilter();
+          dl.delayTime.value=.19;fb.gain.value=.28;wet.gain.value=.22;dlp.type='lowpass';dlp.frequency.value=2500;
+          send=ctx.createGain();send.connect(dl);dl.connect(dlp);dlp.connect(fb);fb.connect(dl);dlp.connect(wet);wet.connect(lp);
+          var n=ctx.sampleRate*2;noiseBuf=ctx.createBuffer(1,n,ctx.sampleRate);var d=noiseBuf.getChannelData(0);for(var i=0;i<n;i++)d[i]=Math.random()*2-1;
+        }
+        if(ctx.state==='suspended')ctx.resume();
+      }catch(e){return null}
+      return ctx;
+    }
+    function env(g,t,a,peak,dur){g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+dur)}
+    function osc(o){ // {f,to,type,dur,vol,when,a,fc,echo}
+      if(muted)return;var c=ensure();if(!c)return;
+      var t=c.currentTime+(o.when||0),s=c.createOscillator(),g=c.createGain();
+      s.type=o.type||'sine';s.frequency.setValueAtTime(o.f,t);if(o.to)s.frequency.exponentialRampToValueAtTime(o.to,t+o.dur);
+      var node=s;
+      if(o.fc){var f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=o.fc;f.Q.value=o.q||.7;s.connect(f);node=f}
+      env(g,t,o.a||.004,o.vol||.1,o.dur);node.connect(g);g.connect(out);if(o.echo)g.connect(send);
+      s.start(t);s.stop(t+o.dur+.05);
+    }
+    function noise(o){ // {dur,vol,type,f,to,q,when,a,echo}
+      if(muted)return;var c=ensure();if(!c)return;
+      var t=c.currentTime+(o.when||0),src=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();
+      src.buffer=noiseBuf;f.type=o.type||'bandpass';f.Q.value=o.q||1;f.frequency.setValueAtTime(o.f,t);if(o.to)f.frequency.exponentialRampToValueAtTime(o.to,t+o.dur);
+      env(g,t,o.a||.002,o.vol||.1,o.dur);src.connect(f);f.connect(g);g.connect(out);if(o.echo)g.connect(send);
+      src.start(t,Math.random());src.stop(t+o.dur+.05);
+    }
+    function click(vol,when,f){noise({type:'highpass',f:f||4000,dur:.012,vol:vol||.12,when:when})}
+    function blip(f,vol,when,dur){osc({f:f,type:'sine',dur:dur||.05,vol:vol||.05,when:when,echo:true})}
+    function sub(f,dur,vol,when){osc({f:f,to:f*.6,type:'sine',dur:dur,vol:vol,when:when,a:.008})}
+    return {
+      unlock:ensure,
+      isMuted:function(){return muted},
+      setMuted:function(m){muted=m;try{localStorage.setItem('ccs-cyberdiag-son',m?'0':'1')}catch(e){}},
+      // toucher d'interface : clic sec + micro-signal
+      tap:function(){click(.1);blip(2400,.025,.004,.03)},
+      // ouverture : impact grave + souffle filtré qui s'ouvre + signal de connexion
+      start:function(){sub(58,1.1,.45);noise({type:'lowpass',f:200,to:2600,dur:.9,vol:.09,a:.35,q:.8});blip(1760,.04,.55,.06);blip(1760,.03,.68,.05)},
+      // réponse : clic de validation, à peine plus sourd pour les niveaux faibles
+      select:function(v){click(.11,0,v<2?2500:4500);osc({f:v<2?520:880,type:'sine',dur:.07,vol:.045,when:.006,fc:3000,echo:true});sub(90,.18,.12)},
+      // chapitre : passage de section, souffle descendant + impulsion grave + double signal
+      chapter:function(){noise({type:'bandpass',f:2400,to:300,dur:.7,vol:.08,a:.05,q:.7});sub(48,.9,.35,.02);blip(1320,.035,.32,.04);blip(1320,.03,.4,.04)},
+      // analyse : nappe sourde + salves de données aléatoires
+      analyze:function(ms){
+        var d=ms/1000;
+        osc({f:55,type:'sawtooth',dur:d,vol:.035,fc:320,a:.4});osc({f:55.6,type:'sawtooth',dur:d,vol:.03,fc:300,a:.4});
+        noise({type:'bandpass',f:400,to:1800,dur:d,vol:.03,a:d*.6,q:2});
+        for(var k=0;k<Math.floor(d*9);k++)blip(2000+Math.random()*2200,.012+Math.random()*.012,.15+Math.random()*(d-.3),.018);
+      },
+      step:function(){click(.06,0,6000);blip(1975,.03,.01,.035)},
+      // décompte du score : compteur mécanique sec, pas de hauteur montante
+      tick:function(){var now=performance.now();if(now-lastTick<42)return;lastTick=now;click(.05,0,5000);osc({f:1600,type:'sine',dur:.014,vol:.012})},
+      // verdict : impact + signal clair (niveaux 3-4) ou double impulsion d'alerte sourde (niveaux 1-2)
+      final:function(n){
+        sub(52,1.4,.5);noise({type:'lowpass',f:3000,to:300,dur:1.2,vol:.05,a:.01});
+        if(n>=3){osc({f:1046.5,type:'sine',dur:.9,vol:.05,when:.05,echo:true});osc({f:2093,type:'sine',dur:.5,vol:.015,when:.05,echo:true})}
+        else{[0,.24].forEach(function(w){osc({f:220,type:'square',dur:.16,vol:.05,when:.08+w,fc:900})})}
+      },
+      // appel d'un expert : notification de supervision (deux signaux propres, avec écho)
+      alert:function(){[0,.5].forEach(function(w){blip(1567.98,.05,w,.09);blip(1174.66,.05,w+.11,.14)});sub(70,.5,.15)},
+      // compte à rebours de veille
+      beep:function(last){if(last){sub(60,.6,.3);osc({f:330,type:'sine',dur:.35,vol:.06,fc:1500})}else{click(.05);blip(1000,.04,0,.07)}}
+    };
+  })();
+
+  /* ======================================================================
+     SCÈNE 3D — réseau, bouclier à 6 segments (6 fonctions NIST), menaces
+     ====================================================================== */
+  var Scene=(function(){
+    var api={ok:false,setMode:function(){},setValues:function(){},react:function(){},burst:function(){},setCurrent:function(){}};
+    var T=window.THREE,cv=document.getElementById('gl');
+    if(!T){document.documentElement.classList.add('no-gl');return api}
+    var renderer;
+    try{renderer=new T.WebGLRenderer({canvas:cv,antialias:true,alpha:true,powerPreference:'high-performance'})}catch(e){renderer=null}
+    if(!renderer||!renderer.getContext()){document.documentElement.classList.add('no-gl');return api}
+    var reduce=false;try{reduce=matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){}
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer.setClearColor(0x000000,0);
+    var scene=new T.Scene(),camera=new T.PerspectiveCamera(42,1,.1,100);
+    camera.position.set(0,0,10);
+    var ORANGE=new T.Color(0xFF7900),RED=new T.Color(0xF0563E),WHITE=new T.Color(0xffffff),GREY=new T.Color(0x3a3a3a);
+
+    function glowTex(){
+      var c=document.createElement('canvas');c.width=c.height=64;var g=c.getContext('2d');
+      var r=g.createRadialGradient(32,32,0,32,32,32);
+      r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.25,'rgba(255,255,255,.75)');r.addColorStop(1,'rgba(255,255,255,0)');
+      g.fillStyle=r;g.fillRect(0,0,64,64);var t=new T.CanvasTexture(c);return t;
+    }
+    var TEX=glowTex();
+    var world=new T.Group(),spinner=new T.Group();
+    world.add(spinner);scene.add(world);
+    var fadeMats=[];
+    function fm(m){m.userData.base=m.opacity;fadeMats.push(m);return m}
+
+    // globe de nœuds (sphère de Fibonacci)
+    var N=reduce?220:380,R=2,pts=[],pos=new Float32Array(N*3);
+    for(var i=0;i<N;i++){
+      var y=1-(i/(N-1))*2,rr=Math.sqrt(1-y*y),th=Math.PI*(3-Math.sqrt(5))*i;
+      var v=new T.Vector3(Math.cos(th)*rr*R,y*R,Math.sin(th)*rr*R);pts.push(v);
+      pos[i*3]=v.x;pos[i*3+1]=v.y;pos[i*3+2]=v.z;
+    }
+    var pg=new T.BufferGeometry();pg.setAttribute('position',new T.BufferAttribute(pos,3));
+    var pm=fm(new T.PointsMaterial({size:.07,map:TEX,color:0xffffff,transparent:true,opacity:.85,depthWrite:false,blending:T.AdditiveBlending}));
+    spinner.add(new T.Points(pg,pm));
+    // liaisons entre voisins
+    var lp=[];
+    for(i=0;i<N;i++){
+      var d=[];for(var j=0;j<N;j++){if(j!==i)d.push([pts[i].distanceToSquared(pts[j]),j])}
+      d.sort(function(a,b){return a[0]-b[0]});
+      for(var k=0;k<2;k++){var o=pts[d[k][1]];lp.push(pts[i].x,pts[i].y,pts[i].z,o.x,o.y,o.z)}
+    }
+    var lg=new T.BufferGeometry();lg.setAttribute('position',new T.Float32BufferAttribute(lp,3));
+    var lm=fm(new T.LineBasicMaterial({color:0xFF7900,transparent:true,opacity:.22,depthWrite:false,blending:T.AdditiveBlending}));
+    spinner.add(new T.LineSegments(lg,lm));
+    // cœur
+    var core=new T.Mesh(new T.IcosahedronGeometry(1.1,1),fm(new T.MeshBasicMaterial({color:0xFF7900,wireframe:true,transparent:true,opacity:.18,blending:T.AdditiveBlending,depthWrite:false})));
+    world.add(core);
+    var coreGlowM=fm(new T.SpriteMaterial({map:TEX,color:0xFF7900,transparent:true,opacity:.55,blending:T.AdditiveBlending,depthWrite:false}));
+    var coreGlow=new T.Sprite(coreGlowM);coreGlow.scale.set(3.6,3.6,1);world.add(coreGlow);
+
+    // bouclier : 6 segments, un par fonction, dans l'ordre du radar (départ en haut, sens horaire)
+    var shield=new T.Group();world.add(shield);
+    var baseRing=new T.Mesh(new T.RingGeometry(2.62,2.64,128),fm(new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.14,side:T.DoubleSide,depthWrite:false})));
+    shield.add(baseRing);
+    var SEG=[],R_IN=2.78,R_OUT=3.02,STEP=Math.PI*2/6,GAP=.07;
+    for(i=0;i<6;i++){
+      var center=Math.PI/2-i*STEP;
+      var m=new T.MeshBasicMaterial({color:0xFF7900,transparent:true,opacity:.3,side:T.DoubleSide,depthWrite:false,blending:T.AdditiveBlending});
+      var mesh=new T.Mesh(new T.RingGeometry(R_IN,R_OUT,32,1,center-STEP/2+GAP/2,STEP-GAP),m);
+      var om=new T.MeshBasicMaterial({color:0xFF7900,transparent:true,opacity:.0,side:T.DoubleSide,depthWrite:false,blending:T.AdditiveBlending});
+      var outer=new T.Mesh(new T.RingGeometry(R_OUT+.06,R_OUT+.09,32,1,center-STEP/2+GAP/2,STEP-GAP),om);
+      shield.add(mesh);shield.add(outer);
+      SEG.push({mesh:mesh,outer:outer,center:center,val:.55,shown:0,flash:0,known:true});
+    }
+    var current=-1;
+
+    // particules : paquets de données et menaces
+    function sprite(color,size){var s=new T.Sprite(new T.SpriteMaterial({map:TEX,color:color,transparent:true,opacity:0,blending:T.AdditiveBlending,depthWrite:false}));s.scale.set(size,size,1);return s}
+    var packets=[];
+    for(i=0;i<(reduce?14:34);i++){var s=sprite(i%3?0xffffff:0xFF7900,.16);spinner.add(s);packets.push({s:s,a:null,b:null,t:1,sp:0})}
+    function launchPacket(p){p.a=pts[(Math.random()*N)|0];p.b=pts[(Math.random()*N)|0];p.t=0;p.sp=.25+Math.random()*.45}
+    var threats=[];for(i=0;i<10;i++){var ts=sprite(0xF0563E,.32);world.add(ts);threats.push({s:ts,on:false})}
+    var sparks=[];for(i=0;i<14;i++){var sp=sprite(0xFF7900,.5);world.add(sp);sparks.push({s:sp,life:0,col:null})}
+    function spark(x,y,col,size){
+      var p=sparks.filter(function(q){return q.life<=0})[0];if(!p)return;
+      p.life=1;p.s.position.set(x,y,.1);p.s.material.color.set(col);p.size=size||1.4;
+    }
+    var spawnT=0;
+    function spawnThreat(){
+      var t=threats.filter(function(q){return !q.on})[0];if(!t)return;
+      var a=Math.random()*Math.PI*2;t.on=true;t.ang=a;t.r=7.5;t.v=2.6+Math.random()*1.4;t.passed=false;t.checked=false;
+      t.s.position.set(Math.cos(a)*t.r,Math.sin(a)*t.r,0);t.s.material.opacity=0;
+    }
+    function segAt(ang){
+      // angle → index de fonction (0 en haut, sens horaire)
+      var rel=(Math.PI/2-ang)/STEP;rel=((rel%6)+6+.5)%6;return Math.floor(rel)%6;
+    }
+
+    // modes de mise en scène
+    var MODES={
+      attract:{x:.62,y:0,s:1.08,dim:1,spin:.12,rate:1.3},
+      sector:{x:.5,y:0,s:.95,dim:.32,spin:.07,rate:3},
+      quiz:{x:-.62,y:-.04,s:.8,dim:.9,spin:.06,rate:2.4},
+      analyze:{x:0,y:0,s:1.15,dim:1,spin:.9,rate:0},
+      result:{x:.62,y:.1,s:1.05,dim:.22,spin:.05,rate:3.5},
+      dash:{x:.6,y:0,s:1,dim:.1,spin:.04,rate:0}
+    };
+    var mode='attract',cur={x:0,y:0,s:.2,dim:0,spin:.1},halfW=4,halfH=4,portrait=false,pointer={x:0,y:0};
+    function target(){
+      var m=MODES[mode],t={dim:m.dim,spin:m.spin,s:m.s,x:m.x*halfW,y:m.y*halfH};
+      if(portrait){
+        t.x=0;
+        if(mode==='attract'){t.y=.52*halfH;t.s=.5}
+        else if(mode==='quiz'){t.y=.66*halfH;t.s=.42}
+        else if(mode==='result'||mode==='dash'){t.y=.3*halfH}
+      }else if(mode==='quiz'){t.x=-halfW+.38*halfW;t.y=.1*halfH}
+      return t;
+    }
+    function resize(){
+      var w=window.innerWidth,h=window.innerHeight;
+      renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+      halfH=Math.tan(camera.fov*Math.PI/360)*camera.position.z;halfW=halfH*camera.aspect;
+      portrait=w/h<.95||w<860;
+    }
+    window.addEventListener('resize',resize);resize();
+    window.addEventListener('pointermove',function(e){pointer.x=e.clientX/window.innerWidth-.5;pointer.y=e.clientY/window.innerHeight-.5},{passive:true});
+
+    var last=performance.now(),running=true,clock=0;
+    document.addEventListener('visibilitychange',function(){running=!document.hidden;if(running){last=performance.now();requestAnimationFrame(loop)}});
+    function loop(now){
+      if(!running)return;
+      var dt=Math.min(.05,(now-last)/1000);last=now;clock+=dt;
+      var t=target(),k=1-Math.exp(-dt*2.6);
+      cur.x+=(t.x-cur.x)*k;cur.y+=(t.y-cur.y)*k;cur.s+=(t.s-cur.s)*k;cur.dim+=(t.dim-cur.dim)*k;cur.spin+=(t.spin-cur.spin)*k;
+      world.position.set(cur.x,cur.y,0);world.scale.setScalar(cur.s);
+      var sp=reduce?cur.spin*.25:cur.spin;
+      spinner.rotation.y+=dt*sp;spinner.rotation.x=Math.sin(clock*.15)*.18;
+      core.rotation.y-=dt*sp*1.4;core.rotation.z+=dt*sp*.5;
+      shield.rotation.z=mode==='analyze'?shield.rotation.z-dt*1.6:shield.rotation.z+(0-shield.rotation.z)*k;
+      camera.position.x+=(pointer.x*.3-camera.position.x)*k*.5;camera.position.y+=(-pointer.y*.2-camera.position.y)*k*.5;camera.lookAt(0,0,0);
+      fadeMats.forEach(function(m){m.opacity=m.userData.base*cur.dim});
+      coreGlowM.opacity=(.4+.15*Math.sin(clock*1.8))*cur.dim;
+
+      // segments du bouclier
+      SEG.forEach(function(g,i){
+        var tv=g.known?g.val:0;
+        if(mode==='attract')tv=.45+.35*Math.max(0,Math.sin(clock*.9-i*1.05));
+        g.shown+=(tv-g.shown)*(1-Math.exp(-dt*3));
+        g.flash=Math.max(0,g.flash-dt*1.6);
+        var col=g.known?RED.clone().lerp(ORANGE,Math.min(1,g.shown*1.6)):GREY;
+        var isCur=i===current;
+        g.mesh.material.color.copy(col).lerp(WHITE,g.flash*.6);
+        g.mesh.material.opacity=(g.known?(.18+.72*g.shown):.12)*cur.dim+g.flash*.5*cur.dim;
+        g.outer.material.color.copy(col);
+        g.outer.material.opacity=((isCur?.55+.35*Math.sin(clock*4):0)+g.flash*.8)*cur.dim;
+      });
+
+      // paquets
+      packets.forEach(function(p){
+        if(p.t>=1){if(Math.random()<dt*2.5*cur.dim)launchPacket(p);p.s.material.opacity=0;return}
+        p.t=Math.min(1,p.t+dt*p.sp*(mode==='analyze'?3:1));
+        var v=p.a.clone().lerp(p.b,p.t).normalize().multiplyScalar(R*(1+.35*Math.sin(Math.PI*p.t)));
+        p.s.position.copy(v);p.s.material.opacity=Math.sin(Math.PI*p.t)*.95*cur.dim;
+      });
+
+      // menaces : bloquées par le bouclier selon la force du segment touché
+      var rate=MODES[mode].rate;
+      if(rate&&!reduce){spawnT-=dt;if(spawnT<=0){spawnThreat();spawnT=rate*(.6+Math.random()*.8)}}
+      threats.forEach(function(th){
+        if(!th.on)return;
+        th.r-=dt*th.v;
+        th.s.position.set(Math.cos(th.ang)*th.r,Math.sin(th.ang)*th.r,0);
+        th.s.material.opacity=Math.min(1,(7.5-th.r)/1.5)*Math.max(.35,cur.dim);
+        if(!th.checked&&th.r<=R_OUT+.05){
+          th.checked=true;
+          var si=segAt(th.ang),g=SEG[si],str=g.known?g.shown:0;
+          if(Math.random()<.2+.78*str){
+            th.on=false;th.s.material.opacity=0;g.flash=1;
+            spark(th.s.position.x,th.s.position.y,0xFF7900,1.6);
+          }else th.passed=true;
+        }
+        if(th.passed&&th.r<=1.2){th.on=false;th.s.material.opacity=0;spark(th.s.position.x,th.s.position.y,0xF0563E,2.6)}
+      });
+      sparks.forEach(function(p){
+        if(p.life<=0){p.s.material.opacity=0;return}
+        p.life-=dt*1.8;var e=1-p.life;p.s.scale.setScalar(.2+p.size*e);p.s.material.opacity=Math.max(0,p.life)*Math.max(.4,cur.dim);
+      });
+      renderer.render(scene,camera);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    api.ok=true;
+    api.setMode=function(m){if(MODES[m])mode=m};
+    api.setValues=function(vals){vals.forEach(function(v,i){if(v===null){SEG[i].known=false}else{SEG[i].known=true;SEG[i].val=v}})};
+    api.setCurrent=function(i){current=i};
+    api.react=function(fi,v){
+      var g=SEG[fi];g.flash=1;
+      var a=g.center,x=Math.cos(a)*2.9,y=Math.sin(a)*2.9;
+      spark(x,y,v>=2?0xFF7900:0xF0563E,v>=2?2.2:1.6);
+      packets.forEach(function(p,i){if(i<6+v*3&&p.t>=1)launchPacket(p)});
+    };
+    api.burst=function(){SEG.forEach(function(g){g.flash=1});packets.forEach(launchPacket);spark(0,0,0xFF7900,5)};
+    return api;
+  })();
+
+  /* ======================================================================
+     ÉCRANS ET PARCOURS
+     ====================================================================== */
+  var $=function(id){return document.getElementById(id)};
+  var SCREENS=['attract','sector','quiz','analyze','result','dash'],curScreen='';
+  function show(name){
+    SCREENS.forEach(function(s){$('s-'+s).classList.toggle('on',s===name)});
+    curScreen=name;Scene.setMode(name);
+    $('restart').hidden=!(name==='quiz'||name==='result'||name==='sector');
+    $('backDiag').hidden=name!=='dash';
+    var el=$('s-'+name);if(el&&el.classList.contains('scroll'))el.scrollTop=0;
+    scheduleIdle();
+  }
+
+  /* --- accueil --- */
+  var hookI=0,hookTimer=null,fnTimer=null;
+  function renderAttract(){
+    $('attQ').innerHTML='<span>'+esc(HOOKS[0])+'</span>';
+    $('attFns').innerHTML=FUNCS.map(function(f,i){return '<li><b>0'+(i+1)+'</b>'+esc(f.name)+'</li>'}).join('');
+  }
+  function startAttractLoops(){
+    stopAttractLoops();hookI=0;var f0=$('attQ').firstChild;if(f0){f0.textContent=HOOKS[0];f0.classList.remove('out')}
+    hookTimer=setInterval(function(){
+      var sp=$('attQ').firstChild;if(!sp)return;
+      sp.classList.add('out');
+      setTimeout(function(){hookI=(hookI+1)%HOOKS.length;sp.textContent=HOOKS[hookI];sp.classList.remove('out')},360);
+    },3800);
+    var fi=0;fnTimer=setInterval(function(){
+      var li=$('attFns').children;for(var i=0;i<li.length;i++)li[i].classList.toggle('on',i===fi);fi=(fi+1)%6;
+    },900);
+  }
+  function stopAttractLoops(){clearInterval(hookTimer);clearInterval(fnTimer)}
+  function goAttract(){
+    var v=state.view;state=newState();state.view='diag';
+    $('res').innerHTML='';$('qbody').innerHTML='';$('org').value='';$('stds').innerHTML='';
+    hideOverlay('expert');hideOverlay('idle');$('chapter').classList.remove('on');
+    Scene.setValues([.55,.55,.55,.55,.55,.55]);Scene.setCurrent(-1);
+    show('attract');startAttractLoops();
+  }
+
+  /* --- secteur --- */
+  function renderSector(){
+    $('sgrid').innerHTML=SECTORS.map(function(s,i){
+      return '<button type="button" class="stile" style="--i:'+i+'" data-s="'+s.id+'" aria-pressed="'+(state.sector===s.id)+'">'+
+        '<svg viewBox="0 0 24 24" aria-hidden="true">'+(SICONS[s.id]||'')+'</svg><b>'+esc(s.name)+'</b><span>'+esc(s.desc)+'</span></button>';
+    }).join('');
+    syncGo();
+  }
+  function syncGo(){
+    var s=sectorObj(),go=$('goBtn');
+    go.disabled=!s;
+    go.innerHTML=s?'Démarrer le diagnostic <span class="arr">→</span>':'Choisissez un secteur';
+    $('stds').innerHTML=s?s.std.map(function(x,i){return '<li style="animation-delay:'+(i*60)+'ms">'+esc(x)+'</li>'}).join(''):'';
+  }
+  function goSector(){stopAttractLoops();Scene.burst();renderSector();show('sector')}
+  $('sgrid').addEventListener('click',function(e){
+    var b=e.target.closest('.stile');if(!b)return;
+    state.sector=b.getAttribute('data-s');Sound.tap();
+    Array.prototype.forEach.call($('sgrid').children,function(o){o.setAttribute('aria-pressed',String(o===b))});
+    syncGo();
+  });
+  $('org').addEventListener('input',function(e){state.org=e.target.value});
+
+  /* --- parcours --- */
+  function fnPartial(fi){
+    var n=0,d=0,seen=false;
+    state.qs.forEach(function(q){if(q.f===fi&&typeof state.answers[q.id]==='number'){seen=true;n+=q.w*state.answers[q.id];d+=3*q.w}});
+    return seen?n/d:null;
+  }
+  function updateHud(fiCur){
+    var vals=FUNCS.map(function(_,i){return fnPartial(i)});
+    $('hudRows').innerHTML=FUNCS.map(function(f,i){
+      var v=vals[i],p=v===null?null:Math.round(v*100);
+      return '<div class="hrow2'+(i===fiCur?' cur':'')+(p!==null&&p<50?' lo':'')+'"><span class="c">'+esc(f.name)+'</span><span class="b"><i style="width:'+(p||0)+'%"></i></span><span class="v">'+(p===null?'—':p+' %')+'</span></div>';
+    }).join('');
+    var answered=Object.keys(state.answers).length;
+    $('hudPct').textContent=answered+' / '+state.qs.length;
+    Scene.setValues(vals);Scene.setCurrent(fiCur);
+  }
+  function renderTrack(){
+    var i=state.step,fiCur=state.qs[i]?state.qs[i].f:-1;
+    $('track').innerHTML=FUNCS.map(function(f,fi){
+      var cells='',all=true;
+      state.qs.forEach(function(x,idx){if(x.f===fi){cells+='<i class="'+(idx<i?'d':idx===i?'n':'')+'"></i>';if(idx>=i)all=false}});
+      return '<div class="tseg'+(fi===fiCur?' cur':'')+(all?' done':'')+'"><span class="tl">'+esc(f.name)+'</span><span class="tt">'+cells+'</span></div>';
+    }).join('');
+  }
+  function renderQ(dir){
+    var i=state.step,q=state.qs[i],cur=state.answers[q.id],sec=sectorObj();
+    $('chap').innerHTML='Chapitre '+(q.f+1)+'/6 · '+esc(FUNCS[q.f].name)+' <span>· '+esc(CHAPTERS[q.f].q)+'</span>';
+    $('qcount').innerHTML='Question <b>'+(i+1)+'</b> / '+state.qs.length;
+    var badges=(q.sector?'<span class="badge">Spécifique · '+esc(sec.tag)+'</span>':'')+(q.crit?'<span class="badge crit">Point critique</span>':'')+(q.w>1&&!q.sector?'<span class="badge">Contrôle clé de votre secteur</span>':'');
+    var opts=SCALE.map(function(s){
+      var g='';for(var k=0;k<3;k++)g+='<i'+(k<s.v?' class="f"':'')+'></i>';
+      return '<button type="button" class="ans" data-v="'+s.v+'" aria-pressed="'+(cur===s.v)+'"><span class="lv" aria-hidden="true">'+g+'</span><span class="tx"><b>'+esc(s.t)+'</b><span>'+esc(s.d)+'</span></span><span class="k" aria-hidden="true">'+s.v+'</span></button>';
+    }).join('');
+    var qb=$('qbody');
+    qb.className='qbody';void qb.offsetWidth;
+    qb.innerHTML='<div class="badges">'+badges+'</div><h2 class="qtext">'+q.q+'</h2><p class="qhint">'+q.hint+'</p><div class="answers" role="group" aria-label="Votre niveau">'+opts+'</div>';
+    qb.className='qbody '+(dir==='back'?'inb':'in');
+    renderTrack();updateHud(q.f);scheduleIdle();
+  }
+  var locked=false;
+  function answer(v,btn,ev){
+    if(locked)return;
+    var i=state.step,q=state.qs[i];if(!q)return;
+    locked=true;
+    state.answers[q.id]=v;
+    Array.prototype.forEach.call($('qbody').querySelectorAll('.ans'),function(o){o.setAttribute('aria-pressed',String(o===btn))});
+    if(btn&&ev&&ev.clientX){var r=btn.getBoundingClientRect();btn.style.setProperty('--x',(ev.clientX-r.left)+'px');btn.style.setProperty('--y',(ev.clientY-r.top)+'px')}
+    if(btn)btn.classList.add('hit');
+    updateHud(q.f);Scene.react(q.f,v);Sound.select(v);
+    setTimeout(function(){
+      $('qbody').classList.add('out');
+      setTimeout(function(){
+        locked=false;
+        var next=i+1;
+        if(next>=state.qs.length){state.step=next;goAnalyze();return}
+        state.step=next;
+        if(state.qs[next].f!==q.f)showChapter(state.qs[next].f,function(){renderQ()});
+        else renderQ();
+      },260);
+    },380);
+  }
+  $('qbody').addEventListener('click',function(e){
+    var b=e.target.closest('.ans');if(!b)return;answer(Number(b.getAttribute('data-v')),b,e);
+  });
+  $('prevBtn').addEventListener('click',function(){
+    if(locked)return;
+    if(state.step<=0){goSector();return}
+    state.step--;renderQ('back');
+  });
+  var chTimer=null,chDone=null;
+  function showChapter(fi,done){
+    var n=state.qs.filter(function(x){return x.f===fi}).length;
+    $('chN').textContent='0'+(fi+1);$('chF').textContent=FUNCS[fi].name;$('chQ').textContent=CHAPTERS[fi].q;
+    $('chM').textContent=n+' question'+(n>1?'s':'')+' · touchez pour continuer';
+    var c=$('chapter');c.classList.remove('on');void c.offsetWidth;c.classList.add('on');
+    Scene.setCurrent(fi);Sound.chapter();
+    chDone=done;clearTimeout(chTimer);chTimer=setTimeout(endChapter,1900);
+  }
+  function endChapter(){clearTimeout(chTimer);$('chapter').classList.remove('on');var d=chDone;chDone=null;if(d)d()}
+  $('chapter').addEventListener('click',endChapter);
+  function startQuiz(){
+    var s=sectorObj();if(!s)return;
+    state.org=$('org').value.trim();
+    state.qs=buildQs(s);state.answers={};state.saveStarted=false;state.pendingRec=null;state.pendingId=null;state.saveMsg='';state.step=0;
+    $('qbody').innerHTML='';renderTrack();updateHud(0);
+    show('quiz');
+    showChapter(0,function(){renderQ()});
+  }
+  $('goBtn').addEventListener('click',function(){Sound.start();startQuiz()});
+
+  /* --- analyse --- */
+  function goAnalyze(){
+    var r=compute(),crit=state.qs.filter(function(q){return q.crit}).length,s=sectorObj();
+    var steps=['Consolidation de vos '+state.qs.length+' réponses',
+      'Pondération des contrôles clés · '+s.name,
+      'Vérification de '+crit+' point'+(crit>1?'s':'')+' critique'+(crit>1?'s':''),
+      'Projection sur les 6 fonctions du NIST CSF 2.0',
+      'Sélection de vos priorités et de cas réels comparables'];
+    $('anSteps').innerHTML=steps.map(function(t){return '<li>'+esc(t)+'</li>'}).join('');
+    var reduce=false;try{reduce=matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){}
+    var dur=reduce?600:3000;
+    $('s-analyze').style.setProperty('--dur',dur+'ms');
+    Scene.setValues(r.fs);Scene.setCurrent(-1);
+    show('analyze');
+    var li=$('anSteps').children;
+    Sound.analyze(dur);
+    for(var k=0;k<li.length;k++)(function(k){setTimeout(function(){if(li[k]&&curScreen==='analyze'){li[k].classList.add('ok');Sound.step()}},(k+1)*dur/(li.length+1))})(k);
+    setTimeout(function(){if(curScreen==='analyze')goResult()},dur+250);
+  }
+
+  /* --- restitution --- */
+  function sectorBench(){
+    try{
+      if(typeof dash==='undefined'||!dash.loaded||dash.demo)return null;
+      var rows=dash.rows.filter(function(x){return x.sector===state.sector});
+      if(rows.length<MIN_N)return null;
+      var sm=summarize(rows);return {n:sm.n,mean:sm.mean,fs:sm.fs};
+    }catch(e){return null}
+  }
+  function radarSvg(fs,bench){
+    var cx=180,cy=170,R=112,n=FUNCS.length;
+    function pt(i,r){var a=(-90+360/n*i)*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)]}
+    function poly(arr){return arr.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1)}).join(' ')}
+    var out='<svg class="radar" viewBox="0 0 360 340" role="img" aria-label="Score par fonction">';
+    [.25,.5,.75,1].forEach(function(f){out+='<polygon class="ring" points="'+poly(FUNCS.map(function(_,i){return pt(i,R*f)}))+'"/>'});
+    FUNCS.forEach(function(_,i){var p=pt(i,R);out+='<line class="axis" x1="'+cx+'" y1="'+cy+'" x2="'+p[0].toFixed(1)+'" y2="'+p[1].toFixed(1)+'"/>'});
+    if(bench)out+='<polygon class="bench" points="'+poly(bench.map(function(v,i){return pt(i,R*v/100)}))+'"/>';
+    var pts=fs.map(function(s,i){return pt(i,R*Math.max(.02,s))});
+    out+='<polygon class="shape" points="'+poly(pts)+'"/>';
+    pts.forEach(function(p){out+='<circle class="dot" cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="4.5"/>'});
+    FUNCS.forEach(function(fn,i){
+      var a=(-90+360/n*i)*Math.PI/180,c=Math.cos(a),s=Math.sin(a),lr=R+18;
+      var x=cx+lr*c,y=cy+lr*s,anchor=c>.3?'start':c<-.3?'end':'middle',yy=s<-.5?y-12:s>.5?y+12:y-4;
+      out+='<text x="'+x.toFixed(1)+'" y="'+yy.toFixed(1)+'" text-anchor="'+anchor+'">'+fn.name+'</text>';
+      out+='<text class="pc" x="'+x.toFixed(1)+'" y="'+(yy+15).toFixed(1)+'" text-anchor="'+anchor+'">'+Math.round(fs[i]*100)+' %</text>';
+    });
+    return out+'</svg>';
+  }
+  function sectorHtml(){
+    var s=sectorObj(),qs=state.qs.filter(function(q){return q.sector});
+    if(!s||!qs.length)return '';
+    var rows=qs.map(function(q){var a=ans(q);
+      return '<li class="chk"><span class="st st-'+a+'">'+STATUS[a]+'</span><div><p class="what">'+q.q+'</p><div class="meta"><span>'+q.ref+'</span>'+(q.crit?'<span><b>Point critique</b></span>':'')+'</div></div></li>';
+    }).join('');
+    return '<section class="glass rv"><div class="sec-h"><h3>Exigences propres à votre secteur</h3><span class="kicker">'+esc(s.name)+'</span></div><ul class="chks">'+rows+'</ul>'+
+      '<p class="legend"><b>Référentiels du secteur.</b> '+s.std.map(esc).join(' · ')+'. Les obligations réglementaires locales varient selon votre régulateur ou votre autorité de tutelle : validez-les avec eux.</p></section>';
+  }
+  function casesHtml(){
+    var list=casesFor();if(!list.length)return '';
+    var cards=list.map(function(c,idx){
+      var present=(c.links||[]).filter(function(id){return qById(id)});
+      var gaps=present.filter(function(id){return ans(qById(id))<3}).map(function(id){return LABELS[id]||id});
+      var gapline=gaps.length?'Vos écarts liés à ce cas : '+gaps.map(esc).join(' · '):(present.length?'Sur ce cas, vos réponses sont au niveau maximal.':'');
+      return '<details class="case"><summary><span class="o">'+(c.local?'<span class="chip">Près de chez vous</span>':'')+'<span>'+esc(c.org)+' · '+esc(c.date)+'</span></span><span class="t">'+esc(c.title)+'</span></summary>'+
+        '<div class="cb"><ul class="facts">'+c.facts.map(function(f){return '<li>'+esc(f)+'</li>'}).join('')+'</ul>'+
+        '<p class="lesson"><b>À retenir.</b> '+esc(c.lesson)+'</p><div class="debate"><b>À débattre</b>'+esc(c.debate)+'</div>'+
+        (gapline?'<p class="gapline">'+gapline+'</p>':'')+(c.caveat?'<p class="caveat">'+esc(c.caveat)+'</p>':'')+
+        '<a class="src" href="'+c.src.u+'" target="_blank" rel="noopener noreferrer">Source : '+esc(c.src.l)+' ↗</a></div></details>';
+    }).join('');
+    return '<section class="glass rv"><div class="sec-h"><h3>Ils ont connu la crise</h3><span class="kicker">Cas réels à débattre</span></div>'+
+      '<p class="note" style="margin-bottom:14px">Faits rapportés par des sources publiques, citées sous chaque cas. Servez-vous-en pour lancer la discussion avec vos équipes, sans juger les organisations concernées.</p><div class="cases">'+cards+'</div></section>';
+  }
+  function offersHtml(){
+    var list=triggeredOffers();if(!list.length)return '';
+    return '<section class="glass rv"><div class="sec-h"><h3>Les réponses Orange Cloud &amp; Cyber Solutions à vos écarts</h3><span class="kicker">Solutions</span></div><div class="offers">'+
+      list.map(function(o){return '<div class="offer"><span class="kicker">Offre Orange</span><h4>'+esc(o.name)+'</h4><p>'+esc(o.txt)+'</p><span class="gap">Répond à votre écart sur : '+esc(o.fn)+'</span></div>'}).join('')+'</div></section>';
+  }
+  function qrHtml(r,pr){
+    if(typeof window.qrcode!=='function')return '';
+    try{
+      var s=sectorObj();
+      var L=['CYBER DIAGNOSTIC · Orange Cloud & Cyber Solutions',s.name+' · '+fmtDate(),'Score '+r.pct+'/100 · Niveau '+r.level.n+' '+r.level.name+(r.capped?' (plafonné)':''),
+        FUNCS.map(function(f,i){return f.name+' '+Math.round(r.fs[i]*100)+' %'}).join(' · '),'Priorités :'];
+      pr.slice(0,3).forEach(function(x,i){var a=x.q.act;if(a.length>120)a=a.slice(0,117)+'…';L.push((i+1)+'. '+a+' ('+x.q.h+' j)')});
+      L.push('Échangez avec nos experts sur le stand CYBER.EX 2026.');
+      var qr=window.qrcode(0,'L');
+      if(window.qrcode.stringToBytesFuncs&&window.qrcode.stringToBytesFuncs['UTF-8'])window.qrcode.stringToBytes=window.qrcode.stringToBytesFuncs['UTF-8'];
+      qr.addData(L.join('\n'),'Byte');qr.make();
+      return '<div class="qrbox">'+qr.createSvgTag({cellSize:4,margin:2,scalable:true})+'<p>Scannez pour emporter votre synthèse</p></div>';
+    }catch(e){return ''}
+  }
+  function countUp(el,to,ms,done){
+    var t0=performance.now(),last=-1;
+    (function f(now){
+      var p=Math.min(1,(now-t0)/ms),e=1-Math.pow(1-p,3),v=Math.round(to*e);
+      el.textContent=v;if(v!==last){last=v;if(v>0&&v<to)Sound.tick()}
+      if(p<1&&curScreen==='result')requestAnimationFrame(f);else{el.textContent=to;if(done)done()}
+    })(t0);
+  }
+  var lastR=null,lastPr=null,io=null;
+  function goResult(){
+    var r=compute(),pr=priorities(),s=sectorObj(),bench=sectorBench();
+    lastR=r;lastPr=pr;
+    var fsP=r.fs.map(function(x){return Math.round(x*100)});
+    var C=2*Math.PI*96,off=C*(1-r.pct/100);
+    var ticks=[25,50,75].map(function(t){var a=t/100*2*Math.PI;return '<line class="tick" x1="'+(110+90*Math.cos(a))+'" y1="'+(110+90*Math.sin(a))+'" x2="'+(110+102*Math.cos(a))+'" y2="'+(110+102*Math.sin(a))+'"/>'}).join('');
+    var capbox='';
+    if(r.capped){var why=ans(r.capQ)===0?'n’existe pas encore':'reste informel';
+      capbox='<div class="capbox"><b>Niveau plafonné à « '+esc(r.capLevel.name)+' »</b>Le point critique « '+esc(r.capQ.short)+' » '+why+'. Un maillon faible de ce type limite le niveau global, même quand le score est bon.</div>'}
+    var lad='<div class="ladder'+(bench?' hasb':'')+'"><div class="lad-z">'+LEVELS.map(function(l,i){return '<div class="'+(i===r.level.n-1?'on':i<r.level.n-1?'past':'')+'"></div>'}).join('')+
+      '<span class="mk" id="mkYou" style="left:0%">Vous · '+r.pct+'</span>'+(bench?'<span class="mk bench" id="mkB" style="left:0%">Moyenne '+esc(s.tag||'secteur')+' · '+bench.mean+'</span>':'')+'</div>'+
+      '<div class="lad-l">'+LEVELS.map(function(l,i){return '<span class="'+(i===r.level.n-1?'on':'')+'">'+esc(l.name)+'</span>'}).join('')+'</div></div>';
+
+    var order=FUNCS.map(function(_,i){return i}).sort(function(a,b){return r.fs[b]-r.fs[a]});
+    var strong=order.filter(function(i){return r.fs[i]>=.5}).slice(0,3);
+    var weak=order.slice().reverse().filter(function(i){return r.fs[i]<.5}).slice(0,3);
+    var critLow=state.qs.filter(function(q){return q.crit&&ans(q)<=1});
+    var goodHtml=strong.length?'<ul class="swl">'+strong.map(function(i){return '<li><span class="c">'+fsP[i]+'<small>%</small></span><div><b>'+esc(FUNCS[i].name)+'</b><p>'+esc(FN_STRONG[i])+'</p></div></li>'}).join('')+'</ul>'
+      :'<p class="empty">Aucune fonction n’atteint encore la moitié du niveau attendu. C’est précisément là qu’un accompagnement apporte le plus vite des résultats.</p>';
+    var badList=weak.map(function(i){return '<li><span class="c">'+fsP[i]+'<small>%</small></span><div><b>'+esc(FUNCS[i].name)+'</b><p>'+esc(FN_RISK[i])+'</p></div></li>'});
+    critLow.forEach(function(q){badList.push('<li><span class="c">!<small class="b">critique</small></span><div><b>'+esc(q.short.charAt(0).toUpperCase()+q.short.slice(1))+'</b><p>Point critique '+(ans(q)===0?'absent':'informel')+' : il plafonne votre niveau global tant qu’il n’est pas formalisé.</p></div></li>')});
+    var badHtml=badList.length?'<ul class="swl">'+badList.join('')+'</ul>':'<p class="empty">Aucune fonction sous 50 % et aucun point critique fragile : votre enjeu est désormais d’éprouver ce dispositif en conditions réelles.</p>';
+
+    var fns=FUNCS.map(function(f,i){var p=fsP[i];
+      return '<div class="fnc'+(p<50?' lo':'')+'"><div class="h"><span class="cd">'+esc(f.name)+'</span><span class="pc">'+p+' %</span></div><div class="nm"><span></span>'+(p<50?'<em>À renforcer</em>':'')+'</div><div class="tr"><div class="fl" data-w="'+p+'"></div></div></div>';
+    }).join('');
+
+    function actItem(x){var rank=pr.indexOf(x)+1;
+      return '<li class="act"><span class="rk">'+rank+'</span><div><p class="what">'+x.q.act+'</p><div class="meta"><span><b>'+esc(FUNCS[x.q.f].name)+'</b></span><span>'+x.q.ref+'</span>'+(x.q.sector?'<span class="chip">'+esc(s.tag)+'</span>':'')+(x.q.crit?'<span class="chip">Point critique</span>':'')+'</div></div></li>'}
+    var p30=pr.filter(function(x){return x.q.h<=30}),p90=pr.filter(function(x){return x.q.h>30});
+    var plan=pr.length?'<div class="plan"><div class="pcol"><h4>Dans les 30 jours</h4><ol class="acts">'+(p30.length?p30.map(actItem).join(''):'<li class="empty">Aucune action urgente à 30 jours.</li>')+'</ol></div>'+
+      '<div class="pcol"><h4>Dans les 90 jours</h4><ol class="acts">'+(p90.length?p90.map(actItem).join(''):'<li class="empty">Aucune action à 90 jours.</li>')+'</ol></div></div>'
+      :'<p class="empty">Toutes vos pratiques sont testées et mesurées. Faites-les éprouver par un exercice de crise grandeur nature.</p>';
+
+    $('res').innerHTML=
+      '<header class="r-head rv"><div><p class="kicker">'+(state.org?esc(state.org)+' · ':'')+esc(s.name)+' · '+fmtDate()+'</p><h1>Votre maturité cyber</h1></div></header>'+
+      '<section class="glass r-hero rv">'+
+        '<div class="gauge"><svg viewBox="0 0 220 220" aria-hidden="true"><circle class="bgc" cx="110" cy="110" r="96"/><circle class="fgc" id="gArc" cx="110" cy="110" r="96" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'"/>'+ticks+'</svg>'+
+          '<div class="ctr"><span class="num" id="gNum">0</span><span class="of">SUR 100</span></div></div>'+
+        '<div class="verdict"><span class="lvl-pill">Niveau '+r.level.n+' sur 4</span><h2 class="lvl-name">'+esc(r.level.name)+'</h2><p class="t">'+esc(r.level.txt)+'</p>'+capbox+lad+'</div>'+
+        '<div class="r-radar">'+radarSvg(r.fs,bench?bench.fs:null)+'<p class="rcap">Score par fonction · NIST CSF 2.0'+(bench?'<i></i>Moyenne '+esc(s.name)+' sur le stand (n = '+bench.n+')':'')+'</p></div>'+
+      '</section>'+
+      '<section class="r-sw"><div class="glass good rv"><div class="sec-h"><h3><span class="dotk"></span>Vos points d’appui</h3></div>'+goodHtml+'</div>'+
+        '<div class="glass bad rv"><div class="sec-h"><h3><span class="dotk"></span>Vos zones d’exposition</h3></div>'+badHtml+'</div></section>'+
+      '<section class="glass rv"><div class="sec-h"><h3>Les 6 fonctions de votre résilience</h3><span class="kicker">NIST CSF 2.0</span></div><div class="fngrid">'+fns+'</div></section>'+
+      '<section class="glass rv"><div class="sec-h"><h3>Votre plan d’action prioritaire</h3><span class="kicker">Du plus urgent au moins urgent</span></div>'+plan+
+        '<p class="legend"><b>Lecture.</b> Les références comme PR.AA ou RS.CO désignent une catégorie du NIST CSF 2.0. Les mentions ISO 22301 renvoient aux chapitres de la norme de continuité d’activité.</p></section>'+
+      sectorHtml()+offersHtml()+casesHtml()+
+      '<section class="r-cta rv"><div><p class="kicker" style="color:#000">Étape suivante</p><h2>Transformons ce diagnostic en feuille de route.</h2>'+
+        '<p>Un expert Orange Cloud &amp; Cyber Solutions est à vos côtés sur le stand pour approfondir ces priorités avec vous, en quinze minutes.</p>'+
+        '<div class="acts2"><button type="button" class="btn dark" id="expertBtn">Échanger avec un expert <span class="arr">→</span></button>'+
+        '<button type="button" class="btn" id="endBtn">Terminer et effacer mes réponses</button></div></div>'+qrHtml(r,pr)+'</section>'+
+      '<div class="r-foot"><p class="note">Auto-évaluation indicative fondée sur vos réponses, qui ne remplace pas un audit. Chaque réponse vaut de 0 à 3 points. Les questions propres au secteur, les points critiques et les contrôles clés de votre secteur pèsent davantage dans le score. Le niveau est plafonné si un point critique est absent ou informel. Les niveaux 1 à 4 s’inspirent des niveaux de mise en œuvre du NIST CSF 2.0.</p>'+
+        '<button type="button" class="link" id="copyBtn">Copier le résumé</button></div>'+
+      '<p class="savestatus" id="savestatus" role="status"></p><div class="toast" id="toast" role="status"></div>'+
+      '<div id="sumbox" hidden><textarea class="sum" id="sum" readonly></textarea></div>';
+
+    show('result');
+    // animations d'apparition
+    if(io)io.disconnect();
+    var reveal=function(el){
+      if(el.classList.contains('in'))return;el.classList.add('in');
+      Array.prototype.forEach.call(el.querySelectorAll('.fl[data-w]'),function(b){b.style.width=b.getAttribute('data-w')+'%'});
+    };
+    var els=$('res').querySelectorAll('.rv');
+    if('IntersectionObserver' in window){
+      io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){reveal(e.target);io.unobserve(e.target)}})},{root:$('s-result'),threshold:.12});
+      Array.prototype.forEach.call(els,function(e){io.observe(e)});
+    }else Array.prototype.forEach.call(els,reveal);
+    setTimeout(function(){
+      $('gArc').style.strokeDashoffset=off.toFixed(1);countUp($('gNum'),r.pct,2400,function(){if(curScreen==='result')Sound.final(r.level.n)});
+      var mk=$('mkYou');if(mk)mk.style.left=Math.max(3,Math.min(97,r.pct))+'%';
+      var mb=$('mkB');if(mb&&bench)mb.style.left=Math.max(3,Math.min(97,bench.mean))+'%';
+    },350);
+    $('expertBtn').addEventListener('click',function(){showOverlay('expert');Sound.alert()});
+    $('endBtn').addEventListener('click',goAttract);
+    $('copyBtn').addEventListener('click',function(){
+      var txt=summaryText(r,pr),toast=$('toast');
+      function fallback(){var box=$('sumbox'),ta=$('sum');box.hidden=false;ta.value=txt;ta.focus();ta.select();toast.textContent='Sélectionnez puis copiez le texte ci-dessous.'}
+      try{navigator.clipboard.writeText(txt).then(function(){toast.textContent='Résumé copié.'},fallback)}catch(e){fallback()}
+    });
+    maybeSave(r);
+  }
+
+  /* --- surcouches : expert, veille --- */
+  function showOverlay(id){$(id).classList.add('on');scheduleIdle()}
+  function hideOverlay(id){$(id).classList.remove('on')}
+  $('expBack').addEventListener('click',function(){hideOverlay('expert')});
+
+  var idleT=null,idleCD=null,idleLeft=0;
+  var IDLE_MS={sector:60000,quiz:75000,analyze:0,result:150000};
+  function scheduleIdle(){
+    clearTimeout(idleT);
+    var ms=IDLE_MS[curScreen];
+    if($('expert').classList.contains('on'))ms=240000;
+    if(!ms)return;
+    idleT=setTimeout(startIdleCountdown,ms);
+  }
+  function startIdleCountdown(){
+    idleLeft=15;$('idleN').textContent=idleLeft;showOverlay('idle');
+    clearInterval(idleCD);
+    idleCD=setInterval(function(){
+      idleLeft--;$('idleN').textContent=idleLeft;if(idleLeft<=5)Sound.beep(idleLeft<=0);
+      if(idleLeft<=0){clearInterval(idleCD);goAttract()}
+    },1000);
+  }
+  function stayActive(){clearInterval(idleCD);hideOverlay('idle');scheduleIdle()}
+  $('idleStay').addEventListener('click',function(e){e.stopPropagation();stayActive()});
+  ['pointerdown','keydown','wheel','touchstart'].forEach(function(ev){
+    document.addEventListener(ev,function(){
+      if($('idle').classList.contains('on'))return;
+      scheduleIdle();
+    },{passive:true,capture:true});
+  });
+  document.getElementById('s-result').addEventListener('scroll',function(){scheduleIdle()},{passive:true});
+
+  /* --- navigation globale --- */
+  $('s-attract').addEventListener('click',function(){Sound.unlock();Sound.start();goSector()});
+  function syncSnd(){$('sndBtn').setAttribute('aria-pressed',String(!Sound.isMuted()));$('sndBtn').title=Sound.isMuted()?'Son coupé':'Son activé'}
+  $('sndBtn').addEventListener('click',function(e){e.stopPropagation();Sound.setMuted(!Sound.isMuted());syncSnd();Sound.tap()});
+  syncSnd();
+  $('restart').addEventListener('click',goAttract);
+  $('backDiag').addEventListener('click',function(){state.view='diag';goAttract()});
+  document.addEventListener('keydown',function(e){
+    if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;
+    if(curScreen==='attract'&&(e.key==='Enter'||e.key===' ')){e.preventDefault();Sound.unlock();Sound.start();goSector();return}
+    if(curScreen==='quiz'){
+      if($('chapter').classList.contains('on')){if(e.key==='Enter'||e.key===' '){e.preventDefault();endChapter()}return}
+      if(/^[0-3]$/.test(e.key)){var b=$('qbody').querySelector('.ans[data-v="'+e.key+'"]');if(b)answer(Number(e.key),b,null)}
+      else if(e.key==='Backspace'||e.key==='ArrowLeft'){e.preventDefault();$('prevBtn').click()}
+    }
+    if(e.key==='Escape'){hideOverlay('expert');if($('idle').classList.contains('on'))stayActive()}
+  });
+  // accès équipe : trois touches rapides sur la marque
+  var taps=[];
+  $('brand').addEventListener('click',function(){
+    var now=Date.now();taps=taps.filter(function(t){return now-t<1200});taps.push(now);
+    if(taps.length>=3){taps=[];openDash()}
+  });
+  function openDash(){stopAttractLoops();state.view='dash';ensureSub();ensureHistSub();show('dash');renderDash()}
+
+  /* ======================= STOCKAGE ANONYME ET TABLEAU DE BORD (repris de l'existant) ======================= */
+  var app=document.getElementById('dash');
+  /* ---------- Storage (db) and anonymised dashboard ---------- */
+  var MIN_N=3; // sectors with fewer answers are never shown in aggregates
+  var dbRef=null,dbStatus='pending',isAdmin=false,dlRef=null,sub=null,dashTimer=null;
+  var dash={rows:[],loaded:false,error:null,demo:false,confirmReset:false,msg:'',filters:{sector:'',day:'',table:false},tab:'stats'};
+  /* Historique nominatif : collection séparée 'hist' (lecture réservée aux éditeurs), jamais vidée par « Supprimer toutes les données ».
+     Copie locale sur le poste du stand, utilisée quand la page tourne hors claude.ai. */
+  var HIST_KEY='ccs-cyberdiag-historique';
+  var hist={rows:[],loaded:false,error:null,sub:null,q:'',sector:''};
+  function localHist(){try{var a=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}}
+  function pushLocalHist(row){try{var a=localHist().filter(function(x){return x.id!==row.id});a.unshift(row);localStorage.setItem(HIST_KEY,JSON.stringify(a.slice(0,3000)))}catch(e){}}
+  function histRow(id,rec,org){return {id:id,ts:rec.ts,org:org||'',sector:rec.sector,pct:rec.pct,level:rec.level,capped:!!rec.capped}}
+  function ensureHistSub(){
+    if(hist.sub||!dbRef)return;
+    try{
+      hist.sub=dbRef.collection('hist').orderBy('ts','desc').limit(3000).onSnapshot(function(snap){
+        hist.rows=snap.docs.map(function(d){return d.data()}).filter(Boolean);hist.loaded=true;hist.error=null;scheduleDash();
+      },function(e){hist.error=(e&&e.code)||'erreur';hist.loaded=true;hist.sub=null;scheduleDash()});
+    }catch(e){hist.error='erreur';hist.loaded=true}
+  }
+
+  function setSave(msg){state.saveMsg=msg;var e=document.getElementById('savestatus');if(e)e.textContent=msg}
+  function newId(){return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+  function buildRecord(r){
+    var ts=new Date().toISOString();
+    return {v:1,ts:ts,day:ts.slice(0,10),sector:state.sector,pct:r.pct,level:r.level.n,capped:!!r.capped,
+      fs:r.fs.map(function(x){return Math.round(x*100)}),answers:Object.assign({},state.answers),
+      offers:triggeredOffers().map(function(o){return o.id})};
+  }
+  function maybeSave(r){
+    if(!state.consent){setSave('Résultat non enregistré.');return}
+    if(state.saveStarted){setSave(state.saveMsg||'');return}
+    if(!state.pendingRec){state.pendingId=newId();state.pendingRec=buildRecord(r);state.pendingOrg=state.org||'';
+      pushLocalHist(histRow(state.pendingId,state.pendingRec,state.pendingOrg))}
+    flushSave();
+  }
+  function flushSave(){
+    if(!state.consent||!state.pendingRec||state.saveStarted)return;
+    if(dbStatus==='pending'){setSave('Enregistrement en cours…');return}
+    if(!dbRef){setSave('Enregistrement indisponible dans cette vue. Le résultat reste affiché ici.');return}
+    state.saveStarted=true;setSave('Enregistrement en cours…');
+    var id=state.pendingId,rec=state.pendingRec,org=state.pendingOrg;
+    dbRef.doc('hist/'+id).set(histRow(id,rec,org)).catch(function(){});
+    dbRef.doc('diag/'+id).set(rec).then(function(){
+      if(!org)return 'ok';
+      return dbRef.doc('orgs/'+id).set({name:org,sector:rec.sector,ts:rec.ts}).then(function(){return 'ok'},function(){return 'noorg'});
+    }).then(function(s){
+      setSave(s==='noorg'?'Résultat enregistré de façon anonyme. Le nom n’a pas pu l’être avec ce niveau d’accès.':'Résultat enregistré de façon anonyme.');
+    },function(e){state.saveStarted=false;setSave('Enregistrement impossible ('+((e&&e.code)||'erreur')+').')});
+  }
+
+  function initCaps(){
+    var c=window.claude;
+    if(!c||typeof c.use!=='function'){dbStatus='none';return}
+    c.use('db').then(function(d){dbRef=d;dbStatus=d?'ready':'none';flushSave();ensureSub();if(state.view==='dash')scheduleDash()},
+      function(){dbStatus='none';flushSave();if(state.view==='dash')scheduleDash()});
+    c.use('user').then(function(u){
+      if(!u)return;
+      return u.canEdit().then(function(v){isAdmin=!!v;if(state.view==='dash')scheduleDash()});
+    }).catch(function(){});
+    c.use('downloads').then(function(x){dlRef=x},function(){});
+  }
+  function ensureSub(){
+    if(sub||!dbRef)return;
+    try{
+      sub=dbRef.collection('diag').orderBy('ts','desc').limit(1000).onSnapshot(function(snap){
+        dash.rows=snap.docs.map(function(d){return d.data()}).filter(Boolean);dash.loaded=true;dash.error=null;scheduleDash();
+      },function(e){dash.error=(e&&e.code)||'erreur';dash.loaded=true;sub=null;scheduleDash()});
+    }catch(e){dash.error='erreur';dash.loaded=true}
+  }
+  function scheduleDash(){clearTimeout(dashTimer);dashTimer=setTimeout(function(){if(state.view==='dash')renderDash()},120)}
+
+  // --- aggregates (pure) ---
+  function mean(a){return a.length?a.reduce(function(x,y){return x+y},0)/a.length:0}
+  function pctOf(a,b){return b?Math.round(a/b*100):0}
+  function bySector(rows){var m={};rows.forEach(function(r){(m[r.sector]=m[r.sector]||[]).push(r)});return m}
+  function sectorName(id){var s=SECTORS.filter(function(x){return x.id===id})[0];return s?s.name:String(id)}
+  function summarize(rs){
+    var lv=[0,0,0,0];
+    rs.forEach(function(r){var i=(r.level||1)-1;if(i>=0&&i<4)lv[i]++});
+    return {n:rs.length,mean:Math.round(mean(rs.map(function(r){return r.pct||0}))),lv:lv,
+      fs:FUNCS.map(function(_,i){return Math.round(mean(rs.map(function(r){return (r.fs&&r.fs[i])||0})))})};
+  }
+  function controlShares(rs){
+    return BASE.map(function(q){
+      var have=rs.filter(function(r){return r.answers&&typeof r.answers[q.id]==='number'});
+      var low=have.filter(function(r){return r.answers[q.id]<=1}).length;
+      return {id:q.id,label:LABELS[q.id]||q.id,n:have.length,share:pctOf(low,have.length)};
+    }).filter(function(x){return x.n>0}).sort(function(a,b){return b.share-a.share});
+  }
+  function offerShares(rs){
+    return OFFERS.map(function(o){
+      var c=rs.filter(function(r){return (r.offers||[]).indexOf(o.id)>-1}).length;
+      return {id:o.id,name:o.name,n:c,share:pctOf(c,rs.length)};
+    });
+  }
+  function dayCounts(rs){
+    var m={};rs.forEach(function(r){if(r.day)m[r.day]=(m[r.day]||0)+1});
+    return Object.keys(m).sort().map(function(d){return {day:d,n:m[d]}});
+  }
+  function fmtDay(d){
+    var p=String(d).split('-'),mo=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+    return p.length===3?(+p[2])+' '+mo[(+p[1])-1]:String(d);
+  }
+
+  // --- demo data (client side only, never stored) ---
+  function demoRows(){
+    var seed=20261028;
+    function rnd(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}
+    var plan=[['gen',14,.34],['bnk',12,.62],['ins',6,.5],['gov',9,.36],['ene',5,.46],['def',2,.5],['hlt',8,.4],['tel',7,.6]];
+    var out=[];
+    plan.forEach(function(p){
+      var sector=SECTORS.filter(function(s){return s.id===p[0]})[0],qs=buildQs(sector);
+      for(var i=0;i<p[1];i++){
+        var answers={};
+        qs.forEach(function(q){var v=p[2]+(rnd()-.5)*.8;answers[q.id]=Math.max(0,Math.min(3,Math.round(v*3)))});
+        var r=scoreFor(qs,answers);
+        out.push({v:1,ts:'2026-10-'+(rnd()<.5?'28':'29')+'T10:00:00.000Z',day:'',sector:p[0],pct:r.pct,level:r.level.n,capped:r.capped,
+          fs:r.fs.map(function(x){return Math.round(x*100)}),answers:answers,offers:offersFor(qs,answers).map(function(o){return o.id})});
+      }
+    });
+    out.forEach(function(r){r.day=r.ts.slice(0,10)});
+    return out;
+  }
+
+  // --- html builders ---
+  function lack(msg){return '<p class="empty">'+esc(msg)+'</p>'}
+  function panel(html){return '<section class="panel">'+html+'</section>'}
+  function hbars(items){
+    return '<div class="hb">'+items.map(function(it){
+      var w=Math.max(0,Math.min(100,it.value));
+      return '<div class="hrow" title="'+esc(it.title||(it.label+' : '+it.text))+'"><div class="hl">'+esc(it.label)+(it.sub?'<small>'+esc(it.sub)+'</small>':'')+'</div>'+
+        '<div class="ht"><div class="hw"><div class="hf" style="width:'+w+'%"></div></div><span class="hv">'+esc(it.text)+'</span></div></div>';
+    }).join('')+'</div>';
+  }
+  function tableHtml(head,rows){
+    return '<div class="tscroll"><table class="dt"><thead><tr>'+head.map(function(h,i){return '<th scope="col"'+(i?' class="num"':'')+'>'+esc(h)+'</th>'}).join('')+'</tr></thead><tbody>'+
+      rows.map(function(r){return '<tr>'+r.map(function(c,i){return i?'<td class="num">'+esc(c)+'</td>':'<th scope="row">'+esc(c)+'</th>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
+  }
+  function card(title,eyebrow,viz,tbl,note){
+    return '<section class="panel chart"><div class="sec-h"><h2>'+esc(title)+'</h2><span class="eyebrow">'+esc(eyebrow)+'</span></div>'+
+      '<div class="viz">'+viz+'</div><div class="tbl">'+tbl+'</div>'+(note?'<p class="note" style="margin-top:12px">'+esc(note)+'</p>':'')+'</section>';
+  }
+  function stackRows(list){
+    var legend='<div class="lgd" aria-hidden="true">'+LEVELS.map(function(l,i){return '<span><i class="sw lv'+(i+1)+'"></i>'+l.name+'</span>'}).join('')+'</div>';
+    return legend+'<div class="hb">'+list.map(function(it){
+      var segs=it.lv.map(function(c,i){
+        if(!c)return '';
+        var p=pctOf(c,it.n);
+        return '<div class="sg lv'+(i+1)+'" style="flex:'+c+'" title="'+LEVELS[i].name+' : '+p+' %">'+(p>=16?'<span>'+p+' %</span>':'')+'</div>';
+      }).join('');
+      return '<div class="hrow"><div class="hl">'+esc(it.label)+'<small>'+esc(it.sub)+'</small></div><div class="stack">'+segs+'</div></div>';
+    }).join('')+'</div>';
+  }
+  function heatTable(list){
+    var head='<tr><th scope="col"></th>'+FUNCS.map(function(f){return '<th scope="col" class="hc-h">'+f.name+'</th>'}).join('')+'</tr>';
+    var body=list.map(function(it){
+      return '<tr><th scope="row" class="hl">'+esc(it.label)+'<small>'+esc(it.sub)+'</small></th>'+
+        it.fs.map(function(v,i){return '<td class="hc'+(v>=78?' hi':'')+'" style="--p:'+v+'" title="'+esc(it.label+' · '+FUNCS[i].name+' : '+v+' %')+'">'+v+'</td>'}).join('')+'</tr>';
+    }).join('');
+    return '<div class="lgd" aria-hidden="true"><span>Score moyen par fonction, en %</span><span class="ramp"></span><span>0 à 100</span></div>'+
+      '<div class="tscroll"><table class="hm"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>';
+  }
+  function dayCols(list){
+    var max=Math.max.apply(null,list.map(function(d){return d.n}).concat([1]));
+    return '<div class="cols">'+list.map(function(d){
+      return '<div class="col" title="'+esc(fmtDay(d.day)+' : '+d.n)+'"><span class="cv">'+d.n+'</span><div class="cbar" style="height:'+Math.max(4,Math.round(d.n/max*100))+'px"></div><span class="cd">'+esc(fmtDay(d.day))+'</span></div>';
+    }).join('')+'</div>';
+  }
+
+  function dashHead(days){
+    var f=dash.filters;
+    var so='<option value="">Tous les secteurs</option>'+SECTORS.map(function(s){return '<option value="'+s.id+'"'+(f.sector===s.id?' selected':'')+'>'+esc(s.name)+'</option>'}).join('');
+    var dopt='<option value="">Toute la période</option>'+days.map(function(d){return '<option value="'+esc(d)+'"'+(f.day===d?' selected':'')+'>'+esc(fmtDay(d))+'</option>'}).join('');
+    return '<section class="panel dh"><div class="eyebrow">Tableau de bord · anonymisé</div>'+
+      '<h1>Maturité cyber par secteur</h1>'+
+      '<p class="lead2">Les noms d’organisations ne sont jamais affichés. Un secteur n’apparaît qu’à partir de '+MIN_N+' diagnostics.</p>'+
+      (dash.demo?'<div class="capbox"><b>Données fictives</b>Aperçu de démonstration généré dans votre navigateur. Rien n’est enregistré.</div>':'')+
+      '<div class="filters"><label>Secteur<select id="f-sector">'+so+'</select></label>'+
+      '<label>Période<select id="f-day">'+dopt+'</select></label>'+
+      '<button type="button" class="btn small" id="f-view">'+(f.table?'Voir les graphiques':'Voir les tableaux')+'</button>'+
+      (dash.demo?'<button type="button" class="btn small" id="f-demo">Quitter l’aperçu</button>':'')+
+      '</div></section>';
+  }
+
+  function dashBody(all,scopeDay,sel){
+    var f=dash.filters;
+    var groups=bySector(scopeDay);
+    var keys=Object.keys(groups);
+    var shown=keys.filter(function(k){return groups[k].length>=MIN_N});
+    var hidden=keys.length-shown.length;
+    var sums={};shown.forEach(function(k){sums[k]=summarize(groups[k])});
+    shown.sort(function(a,b){return sums[b].mean-sums[a].mean});
+    var allSum=summarize(scopeDay),selSum=summarize(sel);
+    var totalOk=scopeDay.length>=MIN_N,selOk=sel.length>=MIN_N;
+    var scopeLbl=f.sector?sectorName(f.sector):'Tous secteurs';
+    var out='';
+
+    out+='<section class="panel hero"><div><span class="hnum">'+sel.length+'</span><span class="hlab">diagnostic'+(sel.length>1?'s':'')+' · '+esc(scopeLbl)+'</span></div>'+
+      '<div class="tiles">'+
+      '<div class="tile"><div class="tl">Score moyen</div><div class="tv">'+(selOk?selSum.mean+' / 100':'—')+'</div></div>'+
+      '<div class="tile"><div class="tl">Niveau Exposé ou Fragile</div><div class="tv">'+(selOk?pctOf(selSum.lv[0]+selSum.lv[1],selSum.n)+' %':'—')+'</div></div>'+
+      '<div class="tile"><div class="tl">Secteurs représentés</div><div class="tv">'+keys.length+'</div></div>'+
+      '</div>'+(selOk?'':'<p class="note" style="grid-column:1/-1;margin:0">Moins de '+MIN_N+' diagnostics dans cette sélection : les indicateurs détaillés restent masqués pour protéger l’anonymat.</p>')+'</section>';
+
+    var rowsAll=[];
+    if(totalOk)rowsAll.push({label:'Tous secteurs',sub:'n = '+allSum.n,sum:allSum});
+    shown.forEach(function(k){rowsAll.push({label:sectorName(k),sub:'n = '+sums[k].n,sum:sums[k]})});
+    var hiddenNote=hidden>0?hidden+' secteur'+(hidden>1?'s':'')+' non affiché'+(hidden>1?'s':'')+' : moins de '+MIN_N+' diagnostics.':'';
+    var none='Pas encore assez de diagnostics pour afficher ce graphique (minimum '+MIN_N+' par ligne).';
+
+    out+=card('Score moyen par secteur','Sur 100 · '+(f.day?fmtDay(f.day):'toute la période'),
+      rowsAll.length?hbars(rowsAll.map(function(r){return {label:r.label,sub:r.sub,value:r.sum.mean,text:r.sum.mean}})):lack(none),
+      rowsAll.length?tableHtml(['Secteur','Diagnostics','Score moyen'],rowsAll.map(function(r){return [r.label,r.sum.n,r.sum.mean]})):lack(none),hiddenNote);
+
+    out+=card('Répartition des niveaux','Part des diagnostics, en %',
+      rowsAll.length?stackRows(rowsAll.map(function(r){return {label:r.label,sub:r.sub,lv:r.sum.lv,n:r.sum.n}})):lack(none),
+      rowsAll.length?tableHtml(['Secteur','Exposé','Fragile','Solide','Résilient'],rowsAll.map(function(r){return [r.label].concat(r.sum.lv.map(function(c){return pctOf(c,r.sum.n)+' %'}))})):lack(none),
+      'Un niveau peut être plafonné par un point critique absent ou informel.');
+
+    out+=card('Forces et faiblesses par fonction','NIST CSF 2.0 · score moyen en %',
+      rowsAll.length?heatTable(rowsAll.map(function(r){return {label:r.label,sub:r.sub,fs:r.sum.fs}})):lack(none),
+      rowsAll.length?tableHtml(['Secteur'].concat(FUNCS.map(function(x){return x.name})),rowsAll.map(function(r){return [r.label].concat(r.sum.fs.map(function(v){return v+' %'}))})):lack(none));
+
+    var ctrl=selOk?controlShares(sel).slice(0,8):[];
+    out+=card('Contrôles les moins maîtrisés',scopeLbl,
+      ctrl.length?hbars(ctrl.map(function(c){return {label:c.label,sub:'',value:c.share,text:c.share+' %',title:c.label+' : '+c.share+' % sous le niveau Formalisé'}})):lack(selOk?'Pas de données.':none),
+      ctrl.length?tableHtml(['Contrôle','Répondants','Sous le niveau Formalisé'],ctrl.map(function(c){return [c.label,c.n,c.share+' %']})):lack(selOk?'Pas de données.':none),
+      'Part des diagnostics qui répondent « inexistant » ou « informel » (niveau 0 ou 1) sur les 12 contrôles communs.');
+
+    var offs=selOk?offerShares(sel):[];
+    out+=card('Où un accompagnement est utile',scopeLbl,
+      offs.length?hbars(offs.map(function(o){return {label:o.name,sub:'',value:o.share,text:o.share+' %'}})):lack(none),
+      offs.length?tableHtml(['Offre','Diagnostics concernés','Part'],offs.map(function(o){return [o.name,o.n,o.share+' %']})):lack(none),
+      'Part des diagnostics qui présentent au moins un écart relevant de l’offre.');
+
+    var perDaySrc=f.sector?all.filter(function(r){return r.sector===f.sector}):all;
+    var days=dayCounts(perDaySrc);
+    out+=card('Participation par jour',scopeLbl,
+      perDaySrc.length>=MIN_N?dayCols(days):lack(none),
+      perDaySrc.length>=MIN_N?tableHtml(['Jour','Diagnostics'],days.map(function(d){return [fmtDay(d.day),d.n]})):lack(none));
+    return out;
+  }
+
+  function adminHtml(n){
+    var conf=dash.confirmReset;
+    return '<section class="panel"><details class="adm"'+(conf||dash.msg?' open':'')+'><summary>Administration</summary><div class="admb">'+
+      '<p class="note">Réservé aux éditeurs. L’export ne contient aucun nom d’organisation. La suppression ne touche pas l’historique des diagnostics (onglet « Historique »). Les noms saisis par les visiteurs sont stockés à part, lisibles uniquement par les éditeurs, et jamais utilisés ici.</p>'+
+      '<div class="actions"><button type="button" class="btn small" id="a-export">Exporter en CSV (anonymisé)</button>'+
+      '<button type="button" class="btn small" id="a-reset">Supprimer toutes les données</button></div>'+
+      (conf?'<div class="capbox"><b>Suppression définitive</b>Supprimer les '+n+' diagnostics et les noms associés ? Cette action ne peut pas être annulée.<div class="actions" style="margin-top:10px"><button type="button" class="btn small primary" id="a-yes">Oui, supprimer</button><button type="button" class="btn small" id="a-no">Annuler</button></div></div>':'')+
+      '<p class="toast" id="dmsg" role="status">'+esc(dash.msg)+'</p></div></details></section>';
+  }
+
+  function csvCell(v){var s=String(v==null?'':v);return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+  function buildCsv(rows){
+    var qids=BASE.map(function(q){return q.id});
+    SECTORS.forEach(function(s){s.items.forEach(function(i){qids.push(i.id)})});
+    var head=['horodatage','jour','secteur','score','niveau','plafonne'].concat(FUNCS.map(function(f){return f.name})).concat(['offres']).concat(qids);
+    var lines=[head.map(csvCell).join(';')];
+    rows.forEach(function(r){
+      var line=[r.ts,r.day,sectorName(r.sector),r.pct,r.level,r.capped?1:0]
+        .concat(FUNCS.map(function(_,i){return (r.fs||[])[i]}))
+        .concat([(r.offers||[]).join('|')])
+        .concat(qids.map(function(id){return r.answers&&typeof r.answers[id]==='number'?r.answers[id]:''}));
+      lines.push(line.map(csvCell).join(';'));
+    });
+    return lines.join('\n');
+  }
+  function setDmsg(t){dash.msg=t;var e=document.getElementById('dmsg');if(e)e.textContent=t}
+  function deleteAll(col){
+    return dbRef.collection(col).limit(1000).get().then(function(snap){
+      var ids=snap.docs.map(function(d){return d.id}),p=Promise.resolve();
+      ids.forEach(function(id){p=p.then(function(){return dbRef.doc(col+'/'+id).delete()})});
+      return p.then(function(){return ids.length});
+    });
+  }
+
+  function dashTabs(){
+    return '<nav class="dtabs" aria-label="Vues du tableau de bord"><button type="button" id="t-stats" aria-current="'+(dash.tab==='stats'?'page':'false')+'">Statistiques par secteur</button>'+
+      '<button type="button" id="t-hist" aria-current="'+(dash.tab==='hist'?'page':'false')+'">Historique des diagnostics</button></nav>';
+  }
+  function fmtTs(ts){try{var d=new Date(ts);return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' · '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}catch(e){return String(ts)}}
+  function histSource(){
+    if(dbRef&&hist.loaded&&!hist.error)return {rows:hist.rows,src:'Diagnostics enregistrés pour cet artifact.'};
+    var why=dbRef&&hist.error?' (lecture partagée réservée aux éditeurs)':'';
+    return {rows:localHist(),src:'Diagnostics réalisés sur ce poste'+why+'.'};
+  }
+  function histFiltered(rows){
+    var q=hist.q.trim().toLowerCase(),sec=hist.sector;
+    return rows.filter(function(r){
+      if(sec&&r.sector!==sec)return false;
+      if(!q)return true;
+      return ((r.org||'anonyme')+' '+sectorName(r.sector)).toLowerCase().indexOf(q)>-1;
+    }).sort(function(a,b){return String(b.ts).localeCompare(String(a.ts))});
+  }
+  function histCsv(rows){
+    var L=[['date','heure','organisation','secteur','score','niveau','plafonne'].join(';')];
+    rows.forEach(function(r){var d=new Date(r.ts),lv=LEVELS[(r.level||1)-1];
+      L.push([d.toLocaleDateString('fr-FR'),d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),r.org||'Anonyme',sectorName(r.sector),r.pct,lv?lv.name:'',r.capped?'oui':'non'].map(csvCell).join(';'))});
+    return L.join('\n');
+  }
+  function renderHist(){
+    if(dbRef&&!hist.loaded){app.innerHTML='<div class="dash">'+dashTabs()+panel(lack('Chargement de l’historique…'))+'</div>';wireTabs();return}
+    var src=histSource(),rows=histFiltered(src.rows),all=src.rows;
+    var named=all.filter(function(r){return r.org}).length;
+    var mean=rows.length?Math.round(rows.reduce(function(a,r){return a+(r.pct||0)},0)/rows.length):null;
+    var so='<option value="">Tous les secteurs</option>'+SECTORS.map(function(x){return '<option value="'+x.id+'"'+(hist.sector===x.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('');
+    var body=rows.length?'<div class="tscroll"><table class="dt ht2"><thead><tr><th scope="col">Date</th><th scope="col">Organisation</th><th scope="col">Secteur</th><th scope="col" class="num">Score</th><th scope="col">Niveau</th></tr></thead><tbody>'+
+      rows.map(function(r){var lv=LEVELS[(r.level||1)-1];
+        return '<tr><td class="dtd">'+esc(fmtTs(r.ts))+'</td><th scope="row">'+(r.org?esc(r.org):'<span class="anon">Anonyme</span>')+'</th><td>'+esc(sectorName(r.sector))+'</td>'+
+          '<td class="num"><span class="sc2"><i style="width:'+Math.max(2,r.pct||0)+'%"></i></span><b>'+(r.pct||0)+'</b></td><td><span class="lvt lv'+(r.level||1)+'">'+esc(lv?lv.name:'')+'</span>'+(r.capped?' <small class="capd">plafonné</small>':'')+'</td></tr>';
+      }).join('')+'</tbody></table></div>'
+      :lack(all.length?'Aucun diagnostic ne correspond à ce filtre.':'Aucun diagnostic dans l’historique pour le moment.');
+    app.innerHTML='<div class="dash">'+dashTabs()+
+      '<section class="panel dh"><div class="eyebrow">Tableau de bord · équipe</div><h1>Historique des diagnostics</h1>'+
+      '<p class="lead2">'+esc(src.src)+' Cet historique est conservé même après « Supprimer toutes les données ».</p>'+
+      '<div class="tiles" style="margin-top:18px"><div class="tile"><div class="tl">Diagnostics</div><div class="tv">'+all.length+'</div></div>'+
+      '<div class="tile"><div class="tl">Avec nom d’organisation</div><div class="tv">'+named+'</div></div>'+
+      '<div class="tile"><div class="tl">Score moyen (sélection)</div><div class="tv">'+(mean===null?'—':mean+' / 100')+'</div></div></div>'+
+      '<div class="filters"><label>Rechercher<input id="h-q" type="search" value="'+esc(hist.q)+'" placeholder="Organisation ou secteur"></label><label>Secteur<select id="h-sector">'+so+'</select></label>'+
+      '<button type="button" class="btn small" id="h-export"'+(rows.length?'':' disabled')+'>Exporter en CSV</button></div><p class="toast" id="hmsg" role="status"></p></section>'+
+      '<section class="panel">'+body+'</section></div>';
+    wireTabs();
+    var qi=document.getElementById('h-q');
+    if(qi){qi.addEventListener('input',function(e){hist.q=e.target.value;var pos=e.target.selectionStart;renderHist();var n=document.getElementById('h-q');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(x){}}})}
+    var hs=document.getElementById('h-sector');if(hs)hs.addEventListener('change',function(e){hist.sector=e.target.value;renderHist()});
+    on('h-export',function(){
+      var csv='\ufeff'+histCsv(rows),msg=document.getElementById('hmsg'),name='historique-cyber-diagnostic.csv';
+      if(dlRef){dlRef.save({filename:name,data:csv}).then(function(){msg.textContent='Fichier enregistré.'},function(e){msg.textContent=e&&e.code==='declined'?'Export annulé.':'Export impossible.'});return}
+      try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);msg.textContent='Fichier téléchargé.'}catch(e){msg.textContent='Export impossible dans cette vue.'}
+    });
+  }
+  function wireTabs(){
+    on('t-stats',function(){dash.tab='stats';renderDash()});
+    on('t-hist',function(){dash.tab='hist';ensureHistSub();renderDash()});
+  }
+  function renderDash(){
+    if(dash.tab==='hist'){renderHist();return}
+    var f=dash.filters;
+    var all=dash.demo?demoRows():dash.rows.slice();
+    var days=dayCounts(all).map(function(d){return d.day});
+    if(f.day&&days.indexOf(f.day)<0)f.day='';
+    var scopeDay=f.day?all.filter(function(r){return r.day===f.day}):all;
+    var sel=f.sector?scopeDay.filter(function(r){return r.sector===f.sector}):scopeDay;
+    var body;
+    if(dash.demo)body=dashBody(all,scopeDay,sel);
+    else if(dbStatus==='pending'||(dbRef&&!dash.loaded&&!dash.error))body=panel(lack('Chargement des données…'));
+    else if(!dbRef)body=panel(lack('Le tableau de bord lit les diagnostics enregistrés. Ouvrez cette page dans claude.ai, connecté à votre compte, pour les afficher.')+'<div class="actions" style="margin-top:14px"><button type="button" class="btn small" id="f-demo">Voir un aperçu avec des données fictives</button></div>');
+    else if(dash.error)body=panel(lack('Lecture impossible ('+dash.error+').'));
+    else if(!all.length)body=panel('<h2 style="margin-bottom:10px">Aucun diagnostic enregistré</h2>'+lack('Les résultats apparaissent ici dès qu’un visiteur termine le diagnostic : l’enregistrement anonyme est automatique.')+'<div class="actions" style="margin-top:14px"><button type="button" class="btn small" id="f-demo">Voir un aperçu avec des données fictives</button></div>');
+    else body=dashBody(all,scopeDay,sel);
+    var head=(dash.demo||all.length)?dashHead(days):panel('<div class="eyebrow">Tableau de bord · anonymisé</div><h1 style="margin-top:6px">Maturité cyber par secteur</h1>');
+    app.innerHTML='<div class="dash" data-view="'+(f.table?'table':'chart')+'">'+dashTabs()+head+body+(isAdmin&&!dash.demo?adminHtml(dash.rows.length):'')+'</div>';
+    wireDash(all);
+  }
+  function on(id,fn){var e=document.getElementById(id);if(e)e.addEventListener('click',fn)}
+  function wireDash(all){
+    wireTabs();
+    var s=document.getElementById('f-sector'),d=document.getElementById('f-day');
+    if(s)s.addEventListener('change',function(e){dash.filters.sector=e.target.value;renderDash()});
+    if(d)d.addEventListener('change',function(e){dash.filters.day=e.target.value;renderDash()});
+    on('f-view',function(){dash.filters.table=!dash.filters.table;renderDash()});
+    on('f-demo',function(){dash.demo=!dash.demo;dash.filters.sector='';dash.filters.day='';renderDash()});
+    on('a-export',function(){
+      if(!dlRef){setDmsg('Export indisponible dans cette vue.');return}
+      dlRef.save({filename:'cyberex-diagnostics-anonymises.csv',data:'﻿'+buildCsv(dash.rows)}).then(
+        function(){setDmsg('Fichier enregistré.')},
+        function(e){setDmsg(e&&e.code==='declined'?'Export annulé.':'Export impossible ('+((e&&e.code)||'erreur')+').')});
+    });
+    on('a-reset',function(){dash.confirmReset=true;dash.msg='';renderDash()});
+    on('a-no',function(){dash.confirmReset=false;renderDash()});
+    on('a-yes',function(){
+      if(!dbRef)return;
+      setDmsg('Suppression en cours…');
+      deleteAll('diag').then(function(n){return deleteAll('orgs').then(function(m){return [n,m]})}).then(function(c){
+        dash.confirmReset=false;dash.msg='Données supprimées ('+c[0]+' diagnostics, '+c[1]+' noms).';scheduleDash();
+      },function(e){dash.confirmReset=false;dash.msg='Suppression impossible ('+((e&&e.code)||'erreur')+').';scheduleDash()});
+    });
+  }
+
+  /* ======================================================================
+     DÉMARRAGE
+     ====================================================================== */
+  if(window.__DIAG_TEST){window.__diag={getState:function(){return state},compute:compute,scoreFor:scoreFor,buildQs:buildQs,priorities:priorities,SECTORS:SECTORS,dash:dash,Sound:Sound}}
+  renderAttract();
+  initCaps();
+  var toDash=false;try{toDash=location.hash==='#dashboard'}catch(e){}
+  if(toDash)openDash();else goAttract();
+})();
+</script>
+</body>
+</html>
